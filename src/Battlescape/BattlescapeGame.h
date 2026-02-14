@@ -301,6 +301,9 @@ public:
 	/// Records a battle event for replay
 	void recordBattleEvent(const std::string &eventType, BattleUnit *actor = nullptr, const std::string &payload = "");
 
+	/// Records a battle state action for replay
+	void recordStateAction(const BattleAction *action, const std::string &stateType);
+
 	/// Public recording control
 	void startReplayRecording();
 	void stopReplayRecording();

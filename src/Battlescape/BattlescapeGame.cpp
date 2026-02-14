@@ -298,6 +298,8 @@ void BattlescapeGame::init()
 	{
 		_playerPanicHandled = false;
 	}
+
+	_recorder->startRecording(_save);
 }
 
 
@@ -1169,7 +1171,11 @@ void BattlescapeGame::handleState()
 void BattlescapeGame::statePushFront(BattleState *bs)
 {
 	_states.push_front(bs);
-	bs->init();
+	if (bs)
+	{
+		recordStateAction(&bs->getAction(), "STATE_PUSHED_FRONT");
+		bs->init();
+	}
 }
 
 /**
@@ -1181,11 +1187,19 @@ void BattlescapeGame::statePushNext(BattleState *bs)
 	if (_states.empty())
 	{
 		_states.push_front(bs);
-		bs->init();
+		if (bs)
+		{
+			recordStateAction(&bs->getAction(), "STATE_PUSHED_NEXT");
+			bs->init();
+		}
 	}
 	else
 	{
 		_states.insert(++_states.begin(), bs);
+		if (bs)
+		{
+			recordStateAction(&bs->getAction(), "STATE_PUSHED_NEXT");
+		}
 	}
 
 }
@@ -1206,14 +1220,19 @@ void BattlescapeGame::statePushBack(BattleState *bs)
 			endTurn();
 			return;
 		}
-		else
+		else if (bs)
 		{
+			recordStateAction(&bs->getAction(), "STATE_PUSHED_BACK");
 			bs->init();
 		}
 	}
 	else
 	{
 		_states.push_back(bs);
+		if (bs)
+		{
+			recordStateAction(&bs->getAction(), "STATE_PUSHED_BACK");
+		}
 	}
 }
 
@@ -2485,7 +2504,7 @@ void BattlescapeGame::removeSummonedPlayerUnits()
 }
 
 /**
- * Tally summoned player-controlled VIPs. We may still need to correct this in the Debriefing.
+ * Tallies summoned player-controlled VIPs. We may still need to correct this in the Debriefing.
  */
 void BattlescapeGame::tallySummonedVIPs()
 {
@@ -3435,5 +3454,42 @@ void BattlescapeGame::recordBattleEvent(const std::string& eventType, BattleUnit
 	_recorder->recordEvent(event);
 }
 
+/**
+ * Records a battle state action for replay.
+ * @param action The battle action to record.
+ * @param stateType The type of state action (FRONT/NEXT/BACK).
+ */
+void BattlescapeGame::recordStateAction(const BattleAction *action, const std::string &stateType)
+{
+	if (!action || !_recorder || !_recorder->getInitialSaveYaml().size())
+	{
+		return; // Not recording or recorder not initialized
+	}
+
+	std::ostringstream payload;
+	payload << "state_type: " << stateType;
+	
+	if (action->actor)
+	{
+		payload << "\nactor_id: " << action->actor->getId();
+		payload << "\naction_type: " << action->type;
+	}
+	
+	if (action->targeting)
+	{
+		payload << "\ntarget: " << action->target.x << ", " 
+		        << action->target.y << ", " << action->target.z;
+	}
+	
+	if (action->weapon)
+	{
+		payload << "\nweapon: " << action->weapon->getRules()->getType();
+	}
+
+	recordBattleEvent("BATTLE_STATE", action->actor, payload.str());
+}
+
 
 }
+
+

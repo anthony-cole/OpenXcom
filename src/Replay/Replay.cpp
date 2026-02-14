@@ -3,6 +3,7 @@
 #include "../Engine/Yaml.h"
 #include "../Engine/Logger.h"
 #include <fstream>
+#include <sstream>
 
 namespace OpenXcom
 {
@@ -22,8 +23,8 @@ bool ReplayRecorder::startRecording(const SavedBattleGame *snapshot)
         auto node = w.toBase();
         node.setAsMap();
         // write the snapshot under "initialSave"
-        auto init = node["initialSave"].write();
-        snapshot->save(init.write());
+        auto init = node["initialSave"];
+        snapshot->save(init);
         auto s = w.toBase().emit();
         _initialSaveYaml = s.yaml;
         return true;
