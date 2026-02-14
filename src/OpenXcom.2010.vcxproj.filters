@@ -1223,6 +1223,10 @@
     <ClCompile Include="Ufopaedia\ArticleStateUnit.cpp">
       <Filter>Ufopaedia</Filter>
     </ClCompile>
+    <ClCompile Include="Battlescape\BattlescapeReplayUI.cpp" />
+    <ClCompile Include="Battlescape\DebriefingReplay.cpp" />
+    <ClCompile Include="Replay\Replay.cpp" />
+    <ClCompile Include="Savegame\ReplaySaver.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="resource.h" />
@@ -2702,6 +2706,8 @@
     <ClInclude Include="Ufopaedia\ArticleStateUnit.h">
       <Filter>Ufopaedia</Filter>
     </ClInclude>
+    <ClInclude Include="Replay\Replay.h" />
+    <ClInclude Include="Savegame\ReplaySaver.h" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Geoscape">
@@ -2773,6 +2779,8 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\res\windows\openxcom.ico" />
+    <None Include="docs\REPLAY_PLAN.md" />
+    <None Include="docs\BATTLESCAPE_RECORDING_GUIDE.md" />
   </ItemGroup>
   <ItemGroup>
     <Natvis Include="..\libs\rapidyaml\ryml.natvis">

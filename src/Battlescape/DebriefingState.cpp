@@ -64,6 +64,7 @@
 #include "../Engine/Exception.h"
 #include "../Engine/Options.h"
 #include "../Engine/RNG.h"
+#include "../Engine/CrossPlatform.h"
 #include "../Basescape/ManageAlienContainmentState.h"
 #include "../Basescape/TransferBaseState.h"
 #include "../Engine/Screen.h"
@@ -74,6 +75,8 @@
 #include "../Savegame/MissionStatistics.h"
 #include "../Savegame/BattleUnitStatistics.h"
 #include "../fallthrough.h"
+// Replay saving support (minimal)
+#include "../Savegame/ReplaySaver.h"
 
 namespace OpenXcom
 {
@@ -103,6 +106,8 @@ DebriefingState::DebriefingState() :
 	_btnStats = new TextButton(60, 12, 244, 180);
 	_btnSell = new TextButton(60, 12, 176, 180);
 	_btnTransfer = new TextButton(80, 12, 88, 180);
+	// Load replay button: opens the folder or file for the last replay
+	_btnReplay = new TextButton(80, 12, 104, 180);
 	_txtTitle = new Text(300, 17, 16, 8);
 	_txtItem = new Text(180, 9, 16, 24);
 	_txtQuantity = new Text(60, 9, 200, 24);
@@ -146,6 +151,7 @@ DebriefingState::DebriefingState() :
 	add(_btnStats, "button", "debriefing");
 	add(_btnSell, "button", "debriefing");
 	add(_btnTransfer, "button", "debriefing");
+	add(_btnReplay, "button", "debriefing");
 	add(_txtTitle, "heading", "debriefing");
 	add(_txtItem, "text", "debriefing");
 	add(_txtQuantity, "text", "debriefing");
@@ -189,6 +195,9 @@ DebriefingState::DebriefingState() :
 	_btnSell->onMouseClick((ActionHandler)&DebriefingState::btnSellClick);
 	_btnTransfer->setText(tr("STR_TRANSFER_UC"));
 	_btnTransfer->onMouseClick((ActionHandler)&DebriefingState::btnTransferClick);
+
+	_btnReplay->setText(tr("STR_LOAD_REPLAY"));
+	_btnReplay->onMouseClick((ActionHandler)&DebriefingState::btnReplayClick);
 
 	_txtTitle->setBig();
 
@@ -800,6 +809,20 @@ void DebriefingState::init()
 	{
 		_game->getMod()->playMusic(Mod::DEBRIEF_MUSIC_BAD);
 	}
+
+	// Auto-save a minimal "last replay" file for basic replay functionality.
+	// Non-fatal: failure to save shouldn't affect the debriefing flow.
+	try
+	{
+		SavedGame *save = _game->getSavedGame();
+		SavedBattleGame *battle = save ? save->getSavedBattle() : nullptr;
+		if (battle)
+		{
+			std::string path = Options::getMasterUserFolder() + "last_replay.yaml";
+			ReplaySaver::saveLastReplay(battle, path);
+		}
+	}
+	catch (...) { /* ignore */ }
 }
 
 /**
@@ -2129,6 +2152,20 @@ void DebriefingState::prepareDebriefing()
 	}
 
 	_missionStatistics->success = success;
+
+	// Auto-save a minimal "last replay" file for basic replay functionality.
+	// Non-fatal: failure to save shouldn't affect the debriefing flow.
+	try
+	{
+		SavedGame *save = _game->getSavedGame();
+		SavedBattleGame *battle = save ? save->getSavedBattle() : nullptr;
+		if (battle)
+		{
+			std::string path = Options::getMasterUserFolder() + "last_replay.yaml";
+			ReplaySaver::saveLastReplay(battle, path);
+		}
+	}
+	catch (...) { /* ignore */ }
 
 	if (success && ruleDeploy && base)
 	{

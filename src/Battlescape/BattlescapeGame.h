@@ -23,6 +23,7 @@
 #include <string>
 #include <list>
 #include <vector>
+#include <memory>
 
 namespace OpenXcom
 {
@@ -39,6 +40,8 @@ class Mod;
 class InfoboxOKState;
 class SoldierDiary;
 class RuleSkill;
+
+namespace Replay { class ReplayRecorder; }
 
 enum BattleActionMove : char { BAM_NORMAL = 0, BAM_RUN = 1, BAM_STRAFE = 2, BAM_SNEAK = 3, BAM_MISSILE = 4 };
 
@@ -146,6 +149,10 @@ private:
 
 	helper::SingleRun _endTurnProcessed;
 	helper::SingleRun _triggerProcessed;
+
+	// Replay recording
+	std::unique_ptr<Replay::ReplayRecorder> _recorder;
+	uint64_t _replayTick;
 
 	/// Ends the turn.
 	void endTurn();
@@ -290,6 +297,18 @@ public:
 	bool areAllEnemiesNeutralized() const { return _allEnemiesNeutralized; }
 	/// Resets the flag.
 	void resetAllEnemiesNeutralized() { _allEnemiesNeutralized = false; }
+
+	/// Records a battle event for replay
+	void recordBattleEvent(const std::string &eventType, BattleUnit *actor = nullptr, const std::string &payload = "");
+
+	/// Public recording control
+	void startReplayRecording();
+	void stopReplayRecording();
+
+	/// Gets the replay recorder.
+	Replay::ReplayRecorder *getRecorder() { return _recorder.get(); }
+	/// Increments and returns the replay tick counter.
+	uint64_t getNextReplayTick() { return ++_replayTick; }
 };
 
 }

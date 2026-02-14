@@ -69,6 +69,7 @@ private:
 	std::vector<DebriefingStat*> _stats;
 	std::vector<SoldierStatsEntry> _soldierStats;
 	TextButton *_btnOk, *_btnStats, *_btnSell, *_btnTransfer;
+	TextButton *_btnReplay;
 	Window *_window;
 	Text *_txtTitle, *_txtItem, *_txtQuantity, *_txtScore, *_txtRecovery, *_txtRating;
 	Text *_txtSoldier, *_txtTU, *_txtStamina, *_txtHealth, *_txtBravery, *_txtReactions;
@@ -121,6 +122,8 @@ public:
 	void btnSellClick(Action *action);
 	/// Handler for clicking the TRANSFER button.
 	void btnTransferClick(Action *action);
+	/// Handler for clicking the Load Replay button.
+	void btnReplayClick(Action *action);
 	/// Handler for showing tooltip.
 	void txtTooltipIn(Action *action);
 	/// Handler for hiding tooltip.

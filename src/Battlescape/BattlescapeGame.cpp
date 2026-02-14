@@ -59,6 +59,7 @@
 #include "../Savegame/BattleUnitStatistics.h"
 #include "ConfirmEndMissionState.h"
 #include "../fmath.h"
+#include "../Replay/Replay.h"
 
 namespace OpenXcom
 {
@@ -191,6 +192,10 @@ BattlescapeGame::BattlescapeGame(SavedBattleGame *save, BattlescapeState *parent
 	_currentAction.skillRules = nullptr;
 
 	_debugPlay = false;
+
+	// Initialize replay recording
+	_recorder = std::make_unique<Replay::ReplayRecorder>();
+	_replayTick = 0;
 
 	checkForCasualties(nullptr, BattleActionAttack{ }, true);
 	cancelCurrentAction();
@@ -2164,7 +2169,6 @@ void BattlescapeGame::requestEndTurn(bool askForConfirmation)
 /**
  * Sets the TU reserved type.
  * @param tur A BattleActionType.
- * @param player is this requested by the player?
  */
 void BattlescapeGame::setTUReserved(BattleActionType tur)
 {
@@ -3373,5 +3377,63 @@ void BattlescapeGame::autoEndBattle()
 		}
 	}
 }
+
+/**
+ * Starts replay recording for this battle.
+ * Initializes the recorder with the current battle state.
+ */
+void BattlescapeGame::startReplayRecording()
+{
+	if (!_recorder)
+	{
+		Log(LOG_WARNING) << "BattlescapeGame::startReplayRecording(): Recorder not initialized";
+		return;
+	}
+	if (_recorder->startRecording(_save))
+	{
+		Log(LOG_DEBUG) << "Battle replay recording started";
+	}
+	else
+	{
+		Log(LOG_WARNING) << "BattlescapeGame::startReplayRecording(): Failed to start recording";
+	}
+}
+
+/**
+ * Stops replay recording and prepares it for export.
+ */
+void BattlescapeGame::stopReplayRecording()
+{
+	if (!_recorder)
+	{
+		return;
+	}
+	_recorder->stopRecording();
+	Log(LOG_DEBUG) << "Battle replay recording stopped";
+}
+
+/**
+ * Records a battle event for replay.
+ * This is the centralized hub for all battle event recording.
+ * @param eventType Type of the event (e.g., "UNIT_MOVE", "SHOT_FIRED", etc.)
+ * @param actor The unit performing the action (can be null)
+ * @param payload Optional YAML fragment or string data for the event
+ */
+void BattlescapeGame::recordBattleEvent(const std::string& eventType, BattleUnit* actor, const std::string& payload)
+{
+	if (!_recorder || !_recorder->getInitialSaveYaml().size()) // Only record if recording has been started
+	{
+		return;
+	}
+
+	Replay::ReplayEvent event;
+	event.tick = _replayTick;
+	event.type = eventType;
+	event.actorId = (actor != nullptr) ? actor->getId() : -1;
+	event.payload = payload;
+
+	_recorder->recordEvent(event);
+}
+
 
 }

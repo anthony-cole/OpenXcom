@@ -54,10 +54,13 @@ private:
 	BattlescapeButton *_btnInventory, *_btnCenter, *_btnNextSoldier, *_btnNextStop, *_btnShowLayers, *_btnHelp;
 	BattlescapeButton *_btnEndTurn, *_btnAbort, *_btnLaunch, *_btnPsi, *_btnSpecial, *_btnSkills, *_reserve;
 	BattlescapeButton *_btnCtrl, *_btnAlt, *_btnShift, *_btnRMB, *_btnMMB;
+	BattlescapeButton *_btnReplay; // Replay record toggle button
 	bool _touchButtonsEnabled;
 	InteractiveSurface *_btnStats;
 	BattlescapeButton *_btnReserveNone, *_btnReserveSnap, *_btnReserveAimed, *_btnReserveAuto, *_btnReserveKneel, *_btnZeroTUs;
 	InteractiveSurface *_btnLeftHandItem, *_btnRightHandItem;
+	// Replay recording state
+	bool _isRecording = false;
 
 	static const int SPECIAL_BUTTONS_MAX = 3;
 	int _posSpecialActions[SPECIAL_BUTTONS_MAX];
@@ -187,6 +190,8 @@ public:
 	void btnRMBClick(Action* action);
 	/// Handler for clicking the MMB touch button.
 	void btnMMBClick(Action* action);
+	/// Handler for clicking the Replay toggle button.
+	void btnReplayClick(Action *action);
 	/// Handler for pressing the toggle touch buttons hotkey.
 	void btnTouchButtonsClick(Action* action);
 	/// Toggles the touch buttons.

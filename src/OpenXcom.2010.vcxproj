@@ -418,6 +418,7 @@
     <ClCompile Include="Battlescape\BattlescapeGame.cpp" />
     <ClCompile Include="Battlescape\BattlescapeGenerator.cpp" />
     <ClCompile Include="Battlescape\BattlescapeMessage.cpp" />
+    <ClCompile Include="Battlescape\BattlescapeReplayUI.cpp" />
     <ClCompile Include="Battlescape\BattlescapeState.cpp" />
     <ClCompile Include="Battlescape\BattleState.cpp" />
     <ClCompile Include="Battlescape\BriefingLightState.cpp" />
@@ -427,6 +428,7 @@
     <ClCompile Include="Battlescape\CommendationLateState.cpp" />
     <ClCompile Include="Battlescape\CommendationState.cpp" />
     <ClCompile Include="Battlescape\ConfirmEndMissionState.cpp" />
+    <ClCompile Include="Battlescape\DebriefingReplay.cpp" />
     <ClCompile Include="Battlescape\DebriefingState.cpp" />
     <ClCompile Include="Battlescape\ExperienceOverviewState.cpp" />
     <ClCompile Include="Battlescape\Explosion.cpp" />
@@ -678,6 +680,7 @@
     <ClCompile Include="Mod\RuleTerrain.cpp" />
     <ClCompile Include="Mod\SoldierNamePool.cpp" />
     <ClCompile Include="Mod\UfoTrajectory.cpp" />
+    <ClCompile Include="Replay\Replay.cpp" />
     <ClCompile Include="Savegame\AlienBase.cpp" />
     <ClCompile Include="Savegame\AlienStrategy.cpp" />
     <ClCompile Include="Savegame\AlienMission.cpp" />
@@ -698,6 +701,7 @@
     <ClCompile Include="Savegame\Production.cpp" />
     <ClCompile Include="Savegame\RankCount.cpp" />
     <ClCompile Include="Savegame\Region.cpp" />
+    <ClCompile Include="Savegame\ReplaySaver.cpp" />
     <ClCompile Include="Savegame\ResearchProject.cpp" />
     <ClCompile Include="Savegame\SaveConverter.cpp" />
     <ClCompile Include="Savegame\SavedBattleGame.cpp" />
@@ -1130,6 +1134,7 @@
     <ClInclude Include="Mod\RuleCommendations.h" />
     <ClInclude Include="Mod\RuleConverter.h" />
     <ClInclude Include="Mod\RuleWeaponSet.h" />
+    <ClInclude Include="Replay\Replay.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="Mod\ArticleDefinition.h" />
     <ClInclude Include="Mod\City.h" />
@@ -1195,6 +1200,7 @@
     <ClInclude Include="Savegame\Production.h" />
     <ClInclude Include="Savegame\RankCount.h" />
     <ClInclude Include="Savegame\Region.h" />
+    <ClInclude Include="Savegame\ReplaySaver.h" />
     <ClInclude Include="Savegame\ResearchDiary.h" />
     <ClInclude Include="Savegame\ResearchProject.h" />
     <ClInclude Include="Savegame\SaveConverter.h" />
@@ -1242,6 +1248,8 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\res\windows\openxcom.ico" />
+    <None Include="docs\BATTLESCAPE_RECORDING_GUIDE.md" />
+    <None Include="docs\REPLAY_PLAN.md" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="OpenXcom.rc" />
