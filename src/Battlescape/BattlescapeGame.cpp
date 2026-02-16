@@ -1404,7 +1404,22 @@ void BattlescapeGame::executeReplayEvent(const Replay::ReplayEvent &ev)
 			{
 				Log(LOG_WARNING) << "Replay: could not find weapon '" << weaponType
 					<< "' for unit " << ev.actorId;
+				// Skip shot/throw events when weapon is missing (unit may be stunned/dead and dropped it)
+				if (actionType != BA_WALK && actionType != BA_KNEEL && actionType != BA_TURN)
+				{
+					Log(LOG_WARNING) << "Replay: skipping action for unit " << ev.actorId
+						<< " (no weapon, unit may be stunned/dead)";
+					return;
+				}
 			}
+		}
+
+		// Skip actions for dead or stunned units (except if already handled above)
+		if (actor->isOut())
+		{
+			Log(LOG_WARNING) << "Replay: skipping action for unit " << ev.actorId
+				<< " (unit is out of action: dead=" << actor->getStatus() << ")";
+			return;
 		}
 
 		// Build BattleAction
@@ -1791,12 +1806,16 @@ void BattlescapeGame::recordPushedAction(BattleState *bs)
 	// Skip if no actor
 	if (!a.actor) return;
 
-	// Deduplicate: skip if same actor+action+target was just recorded
+	// Deduplicate: skip if same actor+action+target was just recorded.
+	// But never dedup shot actions — reaction fire legitimately fires multiple
+	// times at the same target with different RNG seeds.
 	static int lastActorId = -1;
 	static BattleActionType lastActionType = BA_NONE;
 	static Position lastTarget(-1, -1, -1);
 	int actorId = a.actor->getId();
-	if (actorId == lastActorId && effectiveType == lastActionType &&
+	bool isShotAction = (effectiveType == BA_SNAPSHOT || effectiveType == BA_AIMEDSHOT ||
+		effectiveType == BA_AUTOSHOT || effectiveType == BA_LAUNCH || effectiveType == BA_THROW);
+	if (!isShotAction && actorId == lastActorId && effectiveType == lastActionType &&
 		a.target == lastTarget)
 	{
 		return;

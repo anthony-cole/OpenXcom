@@ -375,11 +375,11 @@ void ProjectileFlyBState::init()
 		Tile *targetTile = _parent->getSave()->getTile(_action.target);
 		Position originVoxel = _parent->getTileEngine()->getOriginVoxel(_action, _parent->getSave()->getTile(_origin));
 
-		// Replay diagnostics: log targeting details
-		if (_parent->getSave()->isReplayMode())
+		// Diagnostics: log targeting details (for both recording and replay)
 		{
+			const char *mode = _parent->getSave()->isReplayMode() ? "Replay" : "Battle";
 			BattleUnit *tileUnit = targetTile ? targetTile->getUnit() : nullptr;
-			Log(LOG_INFO) << "Replay targeting: unit " << (_unit ? _unit->getId() : -1)
+			Log(LOG_INFO) << mode << " targeting: unit " << (_unit ? _unit->getId() : -1)
 				<< " action " << _action.type
 				<< " at target " << _action.target.x << "," << _action.target.y << "," << _action.target.z
 				<< " | tileHasUnit=" << (tileUnit != nullptr)
@@ -423,17 +423,38 @@ void ProjectileFlyBState::init()
 					// Failed to find LOF
 					_action.relativeOrigin = BattleActionOrigin::CENTRE; // reset to the normal origin
 
-					_targetVoxel = TileEngine::invalid.toVoxel(); // out of bounds, even after voxel to tile calculation.
-					if (isPlayer)
+					if (_parent->getSave()->isReplayMode())
 					{
-						forceEnableObstacles = true;
+						// During replay, bypass LOF failure — compute target from unit body center.
+						// The original game found LOF (the shot was recorded), but terrain/state divergence
+						// can block it in replay. Using body center lets the shot proceed.
+						BattleUnit *targetUnit = targetTile->getUnit();
+						if (targetUnit)
+						{
+							_targetVoxel = targetUnit->getPosition().toVoxel()
+								+ Position(8, 8, targetUnit->getFloatHeight() + targetUnit->getHeight() / 2 + 1);
+							Log(LOG_INFO) << "Replay: canTargetUnit failed, using unit body center fallback "
+								<< _targetVoxel.x << "," << _targetVoxel.y << "," << _targetVoxel.z;
+						}
+						else
+						{
+							_targetVoxel = TileEngine::invalid.toVoxel();
+						}
+					}
+					else
+					{
+						_targetVoxel = TileEngine::invalid.toVoxel(); // out of bounds, even after voxel to tile calculation.
+						if (isPlayer)
+						{
+							forceEnableObstacles = true;
+						}
 					}
 				}
 			}
 
-			if (_parent->getSave()->isReplayMode())
 			{
-				Log(LOG_INFO) << "Replay targeting: aimed at UNIT, targetVoxel="
+				const char *mode = _parent->getSave()->isReplayMode() ? "Replay" : "Battle";
+				Log(LOG_INFO) << mode << " targeting: aimed at UNIT, targetVoxel="
 					<< _targetVoxel.x << "," << _targetVoxel.y << "," << _targetVoxel.z;
 			}
 		}
@@ -633,6 +654,18 @@ bool ProjectileFlyBState::createNewProjectile()
 	else
 	{
 		double accuracy = BattleUnit::getFiringAccuracy(attack, _parent->getMod()) / accuracyDivider;
+		{
+			const char *mode = _parent->getSave()->isReplayMode() ? "Replay" : "Battle";
+			Position diagOrigin = (_originVoxel != TileEngine::invalid)
+				? _originVoxel
+				: _parent->getTileEngine()->getOriginVoxel(_action, _parent->getSave()->getTile(_origin));
+			Log(LOG_INFO) << mode << " pre-trajectory: unit " << (_unit ? _unit->getId() : -1)
+				<< " originVoxel=" << diagOrigin.x << "," << diagOrigin.y << "," << diagOrigin.z
+				<< " originTile=" << diagOrigin.toTile().x << "," << diagOrigin.toTile().y << "," << diagOrigin.toTile().z
+				<< " unitPos=" << (_unit ? _unit->getPosition().x : -1) << "," << (_unit ? _unit->getPosition().y : -1) << "," << (_unit ? _unit->getPosition().z : -1)
+				<< " baseAccuracy=" << accuracy
+				<< " rngBefore=" << RNG::getSeed();
+		}
 		if (_originVoxel != TileEngine::invalid)
 		{
 			_projectileImpact = projectile->calculateTrajectory(accuracy, _originVoxel, false);
@@ -642,9 +675,9 @@ bool ProjectileFlyBState::createNewProjectile()
 			_projectileImpact = projectile->calculateTrajectory(accuracy);
 		}
 
-		// Replay diagnostics: log trajectory result
-		if (_parent->getSave()->isReplayMode())
+		// Diagnostics: log trajectory result (for both recording and replay)
 		{
+			const char *mode = _parent->getSave()->isReplayMode() ? "Replay" : "Battle";
 			const char *impactStr = "?";
 			switch (_projectileImpact)
 			{
@@ -657,7 +690,7 @@ bool ProjectileFlyBState::createNewProjectile()
 			case V_OUTOFBOUNDS: impactStr = "OUTOFBOUNDS"; break;
 			}
 			Position impactPos = projectile->getPosition(999999); // clamps to trajectory end = actual impact
-			Log(LOG_INFO) << "Replay trajectory: unit " << (_unit ? _unit->getId() : -1)
+			Log(LOG_INFO) << mode << " trajectory: unit " << (_unit ? _unit->getId() : -1)
 				<< " round " << _action.autoShotCounter
 				<< " accuracy=" << accuracy
 				<< " impact=" << impactStr

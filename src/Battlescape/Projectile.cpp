@@ -31,6 +31,7 @@
 #include "../Savegame/Tile.h"
 #include "../Engine/RNG.h"
 #include "../Engine/Options.h"
+#include "../Engine/Logger.h"
 #include "../fmath.h"
 
 namespace OpenXcom
@@ -404,11 +405,29 @@ void Projectile::applyAccuracy(Position origin, Position *target, double accurac
 				hasLOS = _save->getTileEngine()->isTileInLOS(&_action, t, false);
 			}
 
+			{
+				const char *mode = _save->isReplayMode() ? "Replay" : "Battle";
+				Log(LOG_INFO) << mode << " applyAccuracy: actor=" << (bu ? bu->getId() : -1)
+					<< " noLOSPenalty=" << noLOSAccuracyPenalty
+					<< " targetUnit=" << (targetUnit ? targetUnit->getId() : -1)
+					<< " hasLOS=" << hasLOS
+					<< " accuracyBefore=" << accuracy;
+			}
+
 			if (!hasLOS)
 			{
 				accuracy = accuracy * noLOSAccuracyPenalty / 100;
 			}
 		}
+	}
+
+	{
+		const char *mode = _save->isReplayMode() ? "Replay" : "Battle";
+		Log(LOG_INFO) << mode << " applyAccuracy: origin=" << origin.x << "," << origin.y << "," << origin.z
+			<< " target=" << target->x << "," << target->y << "," << target->z
+			<< " accuracy=" << accuracy
+			<< " xyShift=" << xyShift << " zShift=" << zShift
+			<< " rngSeed=" << RNG::getSeed();
 	}
 
 	int deviation = RNG::generate(0, 100) - (accuracy * 100);

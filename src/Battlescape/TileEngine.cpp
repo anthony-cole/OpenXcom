@@ -3241,6 +3241,27 @@ void TileEngine::hit(BattleActionAttack attack, Position center, int power, cons
 	const VoxelType part = (terrainMeleeTilePart > 0) ? (VoxelType)terrainMeleeTilePart : voxelCheck(center, attack.attacker);
 	const int damage = type->getRandomDamage(power);
 	const int tileFinalDamage = type->getTileFinalDamage(type->getRandomDamageForTile(power, damage));
+
+	{
+		const char *mode = _save->isReplayMode() ? "Replay" : "Battle";
+		const char *partStr = "?";
+		switch (part) {
+		case V_FLOOR: partStr = "FLOOR"; break;
+		case V_WESTWALL: partStr = "WESTWALL"; break;
+		case V_NORTHWALL: partStr = "NORTHWALL"; break;
+		case V_OBJECT: partStr = "OBJECT"; break;
+		case V_UNIT: partStr = "UNIT"; break;
+		default: partStr = "OTHER"; break;
+		}
+		BattleUnit *hitBu = (part == V_UNIT) ? tile->getOverlappingUnit(_save) : nullptr;
+		Log(LOG_INFO) << mode << " hit: center=" << center.x << "," << center.y << "," << center.z
+			<< " tile=" << tilePos.x << "," << tilePos.y << "," << tilePos.z
+			<< " part=" << partStr
+			<< " power=" << power << " damage=" << damage << " tileDmg=" << tileFinalDamage
+			<< " hitUnit=" << (hitBu ? hitBu->getId() : -1)
+			<< " rng=" << RNG::getSeed();
+	}
+
 	if (part >= V_FLOOR && part <= V_OBJECT)
 	{
 		bool nothing = true;

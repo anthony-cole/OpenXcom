@@ -211,6 +211,8 @@ void ExplosionBState::init()
 		if (recorder && recorder->isRecording())
 		{
 			recorder->updateLastDamageSeed(RNG::getSeed());
+			Log(LOG_INFO) << "Battle damage: recording RNG seed " << RNG::getSeed()
+				<< " areaOfEffect=" << _areaOfEffect << " power=" << _power;
 		}
 	}
 	// Replay: restore the recorded RNG seed to ensure identical damage outcomes.
@@ -220,7 +222,8 @@ void ExplosionBState::init()
 		if (damageSeed != 0)
 		{
 			Log(LOG_INFO) << "Replay damage: restoring RNG seed " << damageSeed
-				<< " (was " << RNG::getSeed() << ")";
+				<< " (was " << RNG::getSeed() << ")"
+				<< " areaOfEffect=" << _areaOfEffect << " power=" << _power;
 			RNG::setSeed(damageSeed);
 			_parent->getSave()->setReplayDamageSeed(0); // consume it
 		}
