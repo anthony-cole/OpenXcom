@@ -1560,4 +1560,14 @@ std::vector<int> Pathfinding::copyPath() const
 	return _path;
 }
 
+/**
+ * Sets the path directly (for replay), bypassing pathfinding calculation.
+ * @param path The path to set (vector of direction ints, in LIFO order).
+ */
+void Pathfinding::setPath(const std::vector<int> &path)
+{
+	_path = path;
+	_totalTUCost = {};
+}
+
 }

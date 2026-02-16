@@ -593,6 +593,7 @@
     <ClCompile Include="Menu\ListGamesState.cpp" />
     <ClCompile Include="Menu\ListLoadOriginalState.cpp" />
     <ClCompile Include="Menu\ListLoadState.cpp" />
+    <ClCompile Include="Menu\ListReplayState.cpp" />
     <ClCompile Include="Menu\ListSaveState.cpp" />
     <ClCompile Include="Menu\LoadGameState.cpp" />
     <ClCompile Include="Menu\ModConfirmExtendedState.cpp" />
@@ -681,6 +682,7 @@
     <ClCompile Include="Mod\SoldierNamePool.cpp" />
     <ClCompile Include="Mod\UfoTrajectory.cpp" />
     <ClCompile Include="Replay\Replay.cpp" />
+    <ClCompile Include="Replay\ReplayLauncher.cpp" />
     <ClCompile Include="Savegame\AlienBase.cpp" />
     <ClCompile Include="Savegame\AlienStrategy.cpp" />
     <ClCompile Include="Savegame\AlienMission.cpp" />
@@ -1086,6 +1088,7 @@
     <ClInclude Include="Menu\ListGamesState.h" />
     <ClInclude Include="Menu\ListLoadOriginalState.h" />
     <ClInclude Include="Menu\ListLoadState.h" />
+    <ClInclude Include="Menu\ListReplayState.h" />
     <ClInclude Include="Menu\ListSaveState.h" />
     <ClInclude Include="Menu\LoadGameState.h" />
     <ClInclude Include="Menu\ModConfirmExtendedState.h" />
@@ -1135,6 +1138,7 @@
     <ClInclude Include="Mod\RuleConverter.h" />
     <ClInclude Include="Mod\RuleWeaponSet.h" />
     <ClInclude Include="Replay\Replay.h" />
+    <ClInclude Include="Replay\ReplayLauncher.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="Mod\ArticleDefinition.h" />
     <ClInclude Include="Mod\City.h" />

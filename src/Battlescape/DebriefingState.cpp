@@ -815,12 +815,7 @@ void DebriefingState::init()
 	try
 	{
 		SavedGame *save = _game->getSavedGame();
-		SavedBattleGame *battle = save ? save->getSavedBattle() : nullptr;
-		if (battle)
-		{
-			std::string path = Options::getMasterUserFolder() + "last_replay.yaml";
-			ReplaySaver::saveLastReplay(battle, path);
-		}
+		// Replay is now exported in BattlescapeState::finishBattle() with full events
 	}
 	catch (...) { /* ignore */ }
 }
@@ -2158,12 +2153,7 @@ void DebriefingState::prepareDebriefing()
 	try
 	{
 		SavedGame *save = _game->getSavedGame();
-		SavedBattleGame *battle = save ? save->getSavedBattle() : nullptr;
-		if (battle)
-		{
-			std::string path = Options::getMasterUserFolder() + "last_replay.yaml";
-			ReplaySaver::saveLastReplay(battle, path);
-		}
+		// Replay is now exported in BattlescapeState::finishBattle() with full events
 	}
 	catch (...) { /* ignore */ }
 

@@ -41,7 +41,7 @@ class InfoboxOKState;
 class SoldierDiary;
 class RuleSkill;
 
-namespace Replay { class ReplayRecorder; }
+namespace Replay { class ReplayRecorder; class ReplayPlayer; struct ReplayEvent; }
 
 enum BattleActionMove : char { BAM_NORMAL = 0, BAM_RUN = 1, BAM_STRAFE = 2, BAM_SNEAK = 3, BAM_MISSILE = 4 };
 
@@ -93,6 +93,7 @@ struct BattleAction : BattleActionCost
 	bool sprayTargeting; // Used to separate waypoint checks between confirm firing mode and the "spray" autoshot
 	BattleActionOrigin relativeOrigin = BattleActionOrigin::CENTRE; // preferred origin voxel (centre, left or right)
 	int terrainMeleeTilePart = 0; // terrain melee
+	uint64_t replayRngSeed = 0; // RNG seed for replay sync at projectile init time
 
 	/// Default constructor
 	BattleAction() : target(-1, -1, -1), targeting(false), value(0), diff(0), autoShotCounter(0), cameraPosition(0, 0, -1), desperate(false), finalFacing(-1), finalAction(false), number(0), sprayTargeting(false) { }
@@ -150,10 +151,6 @@ private:
 	helper::SingleRun _endTurnProcessed;
 	helper::SingleRun _triggerProcessed;
 
-	// Replay recording
-	std::unique_ptr<Replay::ReplayRecorder> _recorder;
-	uint64_t _replayTick;
-
 	/// Ends the turn.
 	void endTurn();
 	/// Picks the first soldier that is panicking.
@@ -162,6 +159,8 @@ private:
 	bool handlePanickingUnit(BattleUnit *unit);
 	/// Determines whether there are any actions pending for the given unit.
 	bool noActionsPending(BattleUnit *bu);
+	/// Records a pushed BattleState action for replay.
+	void recordPushedAction(BattleState *bs);
 	std::vector<InfoboxOKState*> _infoboxQueue;
 	/// Shows the infoboxes in the queue (if any).
 	void showInfoBoxQueue();
@@ -300,18 +299,17 @@ public:
 
 	/// Records a battle event for replay
 	void recordBattleEvent(const std::string &eventType, BattleUnit *actor = nullptr, const std::string &payload = "");
-
-	/// Records a battle state action for replay
-	void recordStateAction(const BattleAction *action, const std::string &stateType);
+	/// Executes a single replay event, dispatching to appropriate state.
+	void executeReplayEvent(const Replay::ReplayEvent &ev);
 
 	/// Public recording control
 	void startReplayRecording();
 	void stopReplayRecording();
 
-	/// Gets the replay recorder.
-	Replay::ReplayRecorder *getRecorder() { return _recorder.get(); }
-	/// Increments and returns the replay tick counter.
-	uint64_t getNextReplayTick() { return ++_replayTick; }
+	/// Gets the replay recorder (delegates to SavedBattleGame).
+	Replay::ReplayRecorder *getRecorder();
+	/// Increments and returns the replay tick counter (delegates to SavedBattleGame).
+	uint64_t getNextReplayTick();
 };
 
 }

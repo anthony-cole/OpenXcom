@@ -279,6 +279,8 @@ public:
 	const std::vector<int> &getPath() const;
 	/// Makes a copy to the path.
 	std::vector<int> copyPath() const;
+	/// Sets the path directly (for replay).
+	void setPath(const std::vector<int> &path);
 };
 
 }

@@ -307,9 +307,9 @@ NextTurnState::NextTurnState(SavedBattleGame *battleGame, BattlescapeState *stat
 		}
 	}
 
-	if (Options::skipNextTurnScreen && message.empty() && messageReinforcements.empty())
+	if (_battleGame->isReplayMode() || (Options::skipNextTurnScreen && message.empty() && messageReinforcements.empty()))
 	{
-		_timer = new Timer(NEXT_TURN_DELAY);
+		_timer = new Timer(_battleGame->isReplayMode() ? 1 : NEXT_TURN_DELAY);
 		_timer->onTimer((StateHandler)&NextTurnState::close);
 		_timer->start();
 	}

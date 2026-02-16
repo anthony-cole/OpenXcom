@@ -29,6 +29,7 @@
 #include "ConfirmLoadState.h"
 #include "LoadGameState.h"
 #include "ListLoadOriginalState.h"
+#include "ListReplayState.h"
 
 namespace OpenXcom
 {
@@ -41,16 +42,21 @@ namespace OpenXcom
 ListLoadState::ListLoadState(OptionsOrigin origin) : ListGamesState(origin, 0, true)
 {
 	// Create objects
-	_btnOld = new TextButton(80, 16, 60, 172);
-	_btnCancel->setX(180);
+	_btnOld = new TextButton(80, 16, 20, 172);
+	_btnReplay = new TextButton(80, 16, 120, 172);
+	_btnCancel->setX(220);
 
 	add(_btnOld, "button", "saveMenus");
+	add(_btnReplay, "button", "saveMenus");
 
 	// Set up objects
 	_txtTitle->setText(tr("STR_SELECT_GAME_TO_LOAD"));
 
 	_btnOld->setText(tr("STR_ORIGINAL_XCOM"));
 	_btnOld->onMouseClick((ActionHandler)&ListLoadState::btnOldClick);
+
+	_btnReplay->setText(tr("STR_REPLAY"));
+	_btnReplay->onMouseClick((ActionHandler)&ListLoadState::btnReplayClick);
 
 	centerAllSurfaces();
 }
@@ -70,6 +76,11 @@ ListLoadState::~ListLoadState()
 void ListLoadState::btnOldClick(Action *)
 {
 	_game->pushState(new ListLoadOriginalState(_origin));
+}
+
+void ListLoadState::btnReplayClick(Action *)
+{
+	_game->pushState(new ListReplayState());
 }
 
 /**

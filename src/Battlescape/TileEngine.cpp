@@ -42,6 +42,7 @@
 #include "../Engine/Options.h"
 #include "ProjectileFlyBState.h"
 #include "MeleeAttackBState.h"
+#include "../Replay/Replay.h"
 #include "../fmath.h"
 
 namespace OpenXcom
@@ -2496,6 +2497,13 @@ bool TileEngine::checkReactionFire(BattleUnit *unit, const BattleAction &origina
 		return false;
 	}
 
+	// In replay mode, reaction fire is driven by recorded events, not natural triggers.
+	// Letting it run naturally would produce wrong results due to RNG drift.
+	if (_save->isReplayMode())
+	{
+		return false;
+	}
+
 	// reaction fire only triggered when the actioning unit is of the currently playing side, and is still on the map (alive)
 	if (unit->getFaction() != _save->getSide() || unit->getTile() == 0)
 	{
@@ -3229,6 +3237,7 @@ void TileEngine::hit(BattleActionAttack attack, Position center, int power, cons
 	}
 
 	voxelCheckFlush();
+
 	const VoxelType part = (terrainMeleeTilePart > 0) ? (VoxelType)terrainMeleeTilePart : voxelCheck(center, attack.attacker);
 	const int damage = type->getRandomDamage(power);
 	const int tileFinalDamage = type->getTileFinalDamage(type->getRandomDamageForTile(power, damage));
@@ -3337,6 +3346,16 @@ void TileEngine::explode(BattleActionAttack attack, Position center, int power, 
 	std::vector<BattleItem*> toRemove;
 	std::pair<std::map<Tile*, int>::iterator, bool> ret;
 
+	if (_save->isReplayMode())
+	{
+		Log(LOG_INFO) << "Replay explode: center=" << centetTile.x << "," << centetTile.y << "," << centetTile.z
+			<< " voxel=" << center.x << "," << center.y << "," << center.z
+			<< " power=" << power << " radius=" << maxRadius
+			<< " damageType=" << type->ResistType
+			<< " attacker=" << (attack.attacker ? attack.attacker->getId() : -1)
+			<< " rngSeed=" << RNG::getSeed();
+	}
+
 	if (type->FireBlastCalc)
 	{
 		power /= 2;
@@ -3400,6 +3419,14 @@ void TileEngine::explode(BattleActionAttack attack, Position center, int power, 
 						BattleUnit *bu = dest->getOverlappingUnit(_save);
 
 						toRemove.clear();
+						if (bu && _save->isReplayMode())
+						{
+							Log(LOG_INFO) << "Replay explode hit: unit " << bu->getId()
+								<< " at " << dest->getPosition().x << "," << dest->getPosition().y << "," << dest->getPosition().z
+								<< " power_=" << power_ << " damage=" << damage
+								<< " hp=" << bu->getHealth() << " stun=" << bu->getStunlevel()
+								<< " rng=" << RNG::getSeed();
+						}
 						if (bu)
 						{
 							if (dest->getPosition() == centetTile)

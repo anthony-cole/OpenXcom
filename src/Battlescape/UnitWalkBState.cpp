@@ -128,10 +128,18 @@ void UnitWalkBState::think()
 	{
 		if (_fallingWhenStopped && !_falling)
 		{
+			// Unit is transitioning to a fall — walk continues after landing.
+			// Don't record WALK_END here; the walk hasn't truly ended.
 			_falling = true;
 		}
 		else
 		{
+			// Walk is truly ending (reaction fire, collision, etc.)
+			// Record the ending position so replay can correct for path differences.
+			_parent->recordBattleEvent("WALK_END", _unit,
+				"endPos: " + std::to_string(_unit->getPosition().x) + ","
+				+ std::to_string(_unit->getPosition().y) + ","
+				+ std::to_string(_unit->getPosition().z));
 			_pf->abortPath();
 			_parent->popState();
 		}
@@ -509,6 +517,17 @@ void UnitWalkBState::postPathProcedures()
 
 	_terrain->calculateLighting(LL_UNITS, _unit->getPosition());
 	_terrain->calculateFOV(_unit);
+	if (_parent->getSave()->isReplayMode())
+	{
+		Log(LOG_INFO) << "Replay: unit " << _unit->getId() << " walk ended at "
+			<< _unit->getPosition().x << "," << _unit->getPosition().y << "," << _unit->getPosition().z
+			<< " (target was " << _action.target.x << "," << _action.target.y << "," << _action.target.z << ")";
+	}
+	// Record the actual ending position so replay can correct for pathfinding differences
+	_parent->recordBattleEvent("WALK_END", _unit,
+		"endPos: " + std::to_string(_unit->getPosition().x) + ","
+		+ std::to_string(_unit->getPosition().y) + ","
+		+ std::to_string(_unit->getPosition().z));
 	if (!_falling)
 		_parent->popState();
 }

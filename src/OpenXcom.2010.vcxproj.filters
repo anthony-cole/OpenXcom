@@ -1226,7 +1226,9 @@
     <ClCompile Include="Battlescape\BattlescapeReplayUI.cpp" />
     <ClCompile Include="Battlescape\DebriefingReplay.cpp" />
     <ClCompile Include="Replay\Replay.cpp" />
+    <ClCompile Include="Replay\ReplayLauncher.cpp" />
     <ClCompile Include="Savegame\ReplaySaver.cpp" />
+    <ClCompile Include="Menu\ListReplayState.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="resource.h" />
@@ -2707,7 +2709,9 @@
       <Filter>Ufopaedia</Filter>
     </ClInclude>
     <ClInclude Include="Replay\Replay.h" />
+    <ClInclude Include="Replay\ReplayLauncher.h" />
     <ClInclude Include="Savegame\ReplaySaver.h" />
+    <ClInclude Include="Menu\ListReplayState.h" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Geoscape">

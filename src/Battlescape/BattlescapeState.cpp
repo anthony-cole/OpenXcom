@@ -88,6 +88,7 @@
 #include "../Mod/RuleInventory.h"
 #include "../Mod/RuleSoldier.h"
 #include "../Mod/RuleVideo.h"
+#include "../Replay/Replay.h"
 #include <algorithm>
 
 namespace OpenXcom
@@ -723,6 +724,12 @@ BattlescapeState::BattlescapeState() :
 	_gameTimer->onTimer((StateHandler)&BattlescapeState::handleState);
 
 	_battleGame = new BattlescapeGame(_save, this);
+	// Only start replay recording on the first construction (not on options menu restore / load game)
+	// Skip recording if we're in replay mode
+	if (!_save->isReplayMode() && _save->getRecorder() && _save->getRecorder()->getInitialSaveYaml().empty())
+	{
+		_battleGame->startReplayRecording();
+	}
 
 	_barHealthColor = _barHealth->getColor();
 }
@@ -1068,6 +1075,9 @@ void BattlescapeState::mapClick(Action *action)
 		}
 		if (_isMouseScrolled) return;
 	}
+
+	// In replay mode, allow drag-scrolling (handled above) but block unit commands
+	if (_save->isReplayMode()) return;
 
 	// right-click aborts walking state
 	if (_game->isRightClick(action))
@@ -2550,7 +2560,13 @@ void BattlescapeState::animate()
  */
 void BattlescapeState::handleState()
 {
-	_battleGame->handleState();
+	// In replay mode, call handleState N times for speed multiplier
+	auto *rp = _save->getReplayPlayer();
+	int count = (rp && !rp->isPaused()) ? rp->getSpeed() : 1;
+	for (int i = 0; i < count; ++i)
+	{
+		_battleGame->handleState();
+	}
 }
 
 /**
@@ -2723,6 +2739,39 @@ inline void BattlescapeState::handle(Action *action)
 				bool ctrlPressed = _game->isCtrlPressed();
 				bool shiftPressed = _game->isShiftPressed();
 				bool altPressed = _game->isAltPressed();
+
+				// Replay mode controls
+				if (_save->isReplayMode())
+				{
+					auto *rp = _save->getReplayPlayer();
+					if (key == SDLK_SPACE)
+					{
+						if (rp->isPaused()) rp->play(); else rp->pause();
+					}
+					else if (key == SDLK_EQUALS || key == SDLK_PLUS || key == SDLK_KP_PLUS)
+					{
+						int spd = rp->getSpeed();
+						if (spd < 4) rp->setSpeed(spd * 2);
+					}
+					else if (key == SDLK_MINUS || key == SDLK_KP_MINUS)
+					{
+						int spd = rp->getSpeed();
+						if (spd > 1) rp->setSpeed(spd / 2);
+					}
+					else if (key == SDLK_ESCAPE)
+					{
+						_game->popState(); // exit replay
+						return;
+					}
+					// Allow arrow keys / PgUp/PgDn to pass through for camera
+					// All other keys are blocked in replay mode
+					else if (key != SDLK_UP && key != SDLK_DOWN && key != SDLK_LEFT && key != SDLK_RIGHT
+						&& key != SDLK_PAGEUP && key != SDLK_PAGEDOWN
+						&& key != Options::keyBattleLevelUp && key != Options::keyBattleLevelDown)
+					{
+						return;
+					}
+				}
 
 				// "shift-hotkey" - select without centering
 				if (shiftPressed)
@@ -3482,6 +3531,25 @@ void BattlescapeState::popup(State *state)
  */
 void BattlescapeState::finishBattle(bool abort, int inExitArea)
 {
+	// Export replay recording
+	if (_battleGame->getRecorder())
+	{
+		_battleGame->stopReplayRecording();
+		std::string replayPath = Options::getMasterUserFolder() + "last_replay.yaml";
+		_battleGame->getRecorder()->exportToFile(replayPath);
+
+		// Also save a timestamped copy into replays/ subfolder
+		std::string replayDir = Options::getMasterUserFolder() + "replays";
+		CrossPlatform::createFolder(replayDir);
+		time_t now = time(nullptr);
+		struct tm *t = localtime(&now);
+		char buf[64];
+		snprintf(buf, sizeof(buf), "/replay_%04d%02d%02d_%02d%02d%02d.yaml",
+			t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
+			t->tm_hour, t->tm_min, t->tm_sec);
+		_battleGame->getRecorder()->exportToFile(replayDir + buf);
+	}
+
 	bool isPreview = _save->isPreview();
 
 	while (!_game->isState(this))
@@ -3698,6 +3766,9 @@ bool BattlescapeState::getMouseOverIcons() const
  */
 bool BattlescapeState::allowButtons(bool allowSaving) const
 {
+	// Block all action buttons during replay
+	if (_save->isReplayMode())
+		return false;
 	return ((allowSaving || _save->getSide() == FACTION_PLAYER || _save->getDebugMode())
 		&& (_battleGame->getPanicHandled() || _firstInit )
 		&& (allowSaving || !_battleGame->isBusy() || _firstInit)

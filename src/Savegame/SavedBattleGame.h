@@ -20,6 +20,8 @@
 #include <vector>
 #include <string>
 #include <list>
+#include <memory>
+#include <cstdint>
 #include "../Engine/Yaml.h"
 #include "Tile.h"
 #include "../Mod/AlienDeployment.h"
@@ -49,6 +51,7 @@ class RuleItem;
 class HitLog;
 enum HitLogEntryType : int;
 struct BattlescapeTally;
+namespace Replay { class ReplayRecorder; class ReplayPlayer; }
 
 /**
  * The battlescape data that gets written to disk when the game is saved.
@@ -129,6 +132,11 @@ private:
 	int _toggleBrightnessTemp = 0, _toggleNightVisionColorTemp = 0;
 	std::string _hiddenMovementBackground;
 	HitLog *_hitLog;
+	std::unique_ptr<Replay::ReplayRecorder> _recorder;
+	std::unique_ptr<Replay::ReplayPlayer> _replayPlayer;
+	uint64_t _replayTick;
+	uint64_t _replayExplosionSeed = 0;
+	uint64_t _replayHitSeed = 0;
 	ScriptValues<SavedBattleGame> _scriptValues;
 	/// Selects a soldier.
 	BattleUnit *selectPlayerUnit(int dir, bool checkReselect = false, bool setReselect = false, bool checkInventory = false);
@@ -666,6 +674,27 @@ public:
 	const HitLog *getHitLog() const;
 	/// Reset all the unit hit state flags.
 	void resetUnitHitStates();
+	/// Gets the replay recorder.
+	Replay::ReplayRecorder *getRecorder() { return _recorder.get(); }
+	/// Gets the replay tick and increments it.
+	uint64_t getNextReplayTick() { return ++_replayTick; }
+	/// Gets the current replay tick.
+	uint64_t getReplayTick() const { return _replayTick; }
+	/// Gets the replay player (null if not in replay mode).
+	Replay::ReplayPlayer *getReplayPlayer() { return _replayPlayer.get(); }
+	/// Sets the replay player and disables recording.
+	void setReplayPlayer(std::unique_ptr<Replay::ReplayPlayer> player);
+	/// Returns true if this battle is being replayed.
+	bool isReplayMode() const { return _replayPlayer != nullptr; }
+	/// Store/retrieve explosion RNG seed for replay determinism.
+	void setReplayExplosionSeed(uint64_t seed) { _replayExplosionSeed = seed; }
+	uint64_t getReplayExplosionSeed() const { return _replayExplosionSeed; }
+	/// Store/retrieve hit RNG seed for replay determinism.
+	void setReplayHitSeed(uint64_t seed) { _replayHitSeed = seed; }
+	uint64_t getReplayHitSeed() const { return _replayHitSeed; }
+	/// Unified damage seed — set from ExplosionBState, covers both hit and explode.
+	void setReplayDamageSeed(uint64_t seed) { _replayExplosionSeed = seed; }
+	uint64_t getReplayDamageSeed() const { return _replayExplosionSeed; }
 };
 
 }

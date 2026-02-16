@@ -31,6 +31,8 @@
 #include "../Mod/RuleItem.h"
 #include "../Mod/Armor.h"
 #include "../Engine/RNG.h"
+#include "../Engine/Logger.h"
+#include "../Replay/Replay.h"
 
 namespace OpenXcom
 {
@@ -201,6 +203,28 @@ void ExplosionBState::init()
 
 
 	bool range = !(_hit || (_attack.weapon_item && _attack.weapon_item->getRules()->getBattleType() == BT_PSIAMP));
+
+	// Recording: capture RNG seed before damage calculation for replay determinism.
+	// Uses "only set if empty" guard so chain explosions don't overwrite the initial seed.
+	{
+		auto* recorder = _parent->getSave()->getRecorder();
+		if (recorder && recorder->isRecording())
+		{
+			recorder->updateLastDamageSeed(RNG::getSeed());
+		}
+	}
+	// Replay: restore the recorded RNG seed to ensure identical damage outcomes.
+	if (_parent->getSave()->isReplayMode())
+	{
+		uint64_t damageSeed = _parent->getSave()->getReplayDamageSeed();
+		if (damageSeed != 0)
+		{
+			Log(LOG_INFO) << "Replay damage: restoring RNG seed " << damageSeed
+				<< " (was " << RNG::getSeed() << ")";
+			RNG::setSeed(damageSeed);
+			_parent->getSave()->setReplayDamageSeed(0); // consume it
+		}
+	}
 
 	if (_areaOfEffect)
 	{
