@@ -2986,45 +2986,47 @@ const char* battleActionToString(BattleActionType type)
 {
 	switch (type)
 	{
-	case BA_NONE:           return "BA_NONE";
-	case BA_TURN:           return "BA_TURN";
-	case BA_WALK:           return "BA_WALK";
-	case BA_KNEEL:          return "BA_KNEEL";
-	case BA_PRIME:          return "BA_PRIME";
-	case BA_UNPRIME:        return "BA_UNPRIME";
-	case BA_THROW:          return "BA_THROW";
-	case BA_AUTOSHOT:       return "BA_AUTOSHOT";
-	case BA_SNAPSHOT:       return "BA_SNAPSHOT";
-	case BA_AIMEDSHOT:      return "BA_AIMEDSHOT";
-	case BA_HIT:            return "BA_HIT";
-	case BA_USE:            return "BA_USE";
-	case BA_LAUNCH:         return "BA_LAUNCH";
-	case BA_MINDCONTROL:    return "BA_MINDCONTROL";
-	case BA_PANIC:          return "BA_PANIC";
-	case BA_RETHINK:        return "BA_RETHINK";
-	case BA_CQB:            return "BA_CQB";
-	default:                return "BA_NONE";
+	case BA_NONE:           return "NONE";
+	case BA_TURN:           return "TURN";
+	case BA_WALK:           return "WALK";
+	case BA_KNEEL:          return "KNEEL";
+	case BA_PRIME:          return "PRIME";
+	case BA_UNPRIME:        return "UNPRIME";
+	case BA_THROW:          return "THROW";
+	case BA_AUTOSHOT:       return "AUTOSHOT";
+	case BA_SNAPSHOT:       return "SNAPSHOT";
+	case BA_AIMEDSHOT:      return "AIMEDSHOT";
+	case BA_HIT:            return "HIT";
+	case BA_USE:            return "USE";
+	case BA_LAUNCH:         return "LAUNCH";
+	case BA_MINDCONTROL:    return "MINDCONTROL";
+	case BA_PANIC:          return "PANIC";
+	case BA_RETHINK:        return "RETHINK";
+	case BA_CQB:            return "CQB";
+	default:                return "NONE";
 	}
 }
 
 BattleActionType battleActionFromString(const std::string &s)
 {
-	if (s == "BA_TURN")         return BA_TURN;
-	if (s == "BA_WALK")         return BA_WALK;
-	if (s == "BA_KNEEL")        return BA_KNEEL;
-	if (s == "BA_PRIME")        return BA_PRIME;
-	if (s == "BA_UNPRIME")      return BA_UNPRIME;
-	if (s == "BA_THROW")        return BA_THROW;
-	if (s == "BA_AUTOSHOT")     return BA_AUTOSHOT;
-	if (s == "BA_SNAPSHOT")     return BA_SNAPSHOT;
-	if (s == "BA_AIMEDSHOT")    return BA_AIMEDSHOT;
-	if (s == "BA_HIT")          return BA_HIT;
-	if (s == "BA_USE")          return BA_USE;
-	if (s == "BA_LAUNCH")       return BA_LAUNCH;
-	if (s == "BA_MINDCONTROL")  return BA_MINDCONTROL;
-	if (s == "BA_PANIC")        return BA_PANIC;
-	if (s == "BA_RETHINK")      return BA_RETHINK;
-	if (s == "BA_CQB")          return BA_CQB;
+	// Strip "BA_" prefix for backwards compatibility with old replays
+	const std::string &key = (s.size() > 3 && s[0] == 'B' && s[1] == 'A' && s[2] == '_') ? s.substr(3) : s;
+	if (key == "TURN")         return BA_TURN;
+	if (key == "WALK")         return BA_WALK;
+	if (key == "KNEEL")        return BA_KNEEL;
+	if (key == "PRIME")        return BA_PRIME;
+	if (key == "UNPRIME")      return BA_UNPRIME;
+	if (key == "THROW")        return BA_THROW;
+	if (key == "AUTOSHOT")     return BA_AUTOSHOT;
+	if (key == "SNAPSHOT")     return BA_SNAPSHOT;
+	if (key == "AIMEDSHOT")    return BA_AIMEDSHOT;
+	if (key == "HIT")          return BA_HIT;
+	if (key == "USE")          return BA_USE;
+	if (key == "LAUNCH")       return BA_LAUNCH;
+	if (key == "MINDCONTROL")  return BA_MINDCONTROL;
+	if (key == "PANIC")        return BA_PANIC;
+	if (key == "RETHINK")      return BA_RETHINK;
+	if (key == "CQB")          return BA_CQB;
 	try { return static_cast<BattleActionType>(std::stoi(s)); }
 	catch (...) { return BA_NONE; }
 }

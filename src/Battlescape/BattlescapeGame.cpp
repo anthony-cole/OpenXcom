@@ -1382,7 +1382,7 @@ void BattlescapeGame::executeReplayEvent(const Replay::ReplayEvent &ev)
 					const auto &nextEv = allEvts[idx + 1];
 					if (nextEv.type != "STATE_ACTION" || nextEv.actorId != ev.actorId)
 						break;
-					if (nextEv.payload.find("action: BA_LAUNCH") == std::string::npos)
+					if (nextEv.payload.find("action: LAUNCH") == std::string::npos)
 						break;
 					auto targetPos = nextEv.payload.find("target: ");
 					if (targetPos != std::string::npos)
