@@ -1484,6 +1484,19 @@ void BattlescapeState::btnEndTurnClick(Action *)
  */
 void BattlescapeState::btnAbortClick(Action *)
 {
+	// In replay mode, Escape cleanly exits the replay
+	if (_save->isReplayMode())
+	{
+		_save->setReplayPlayer(nullptr);
+		_save->setBattleState(nullptr);
+		_game->getSavedGame()->setBattleGame(nullptr);
+		Options::baseXResolution = Options::baseXGeoscape;
+		Options::baseYResolution = Options::baseYGeoscape;
+		_game->getScreen()->resetDisplay(false);
+		_game->popState(); // pop BattlescapeState
+		return;
+	}
+
 	if (_save->isPreview())
 	{
 		if (!_save->getCraftForPreview())
@@ -2747,20 +2760,30 @@ inline void BattlescapeState::handle(Action *action)
 					if (key == SDLK_SPACE)
 					{
 						if (rp->isPaused()) rp->play(); else rp->pause();
+						return; // don't let Space fall through to normal handlers
 					}
 					else if (key == SDLK_EQUALS || key == SDLK_PLUS || key == SDLK_KP_PLUS)
 					{
 						int spd = rp->getSpeed();
 						if (spd < 4) rp->setSpeed(spd * 2);
+						return;
 					}
 					else if (key == SDLK_MINUS || key == SDLK_KP_MINUS)
 					{
 						int spd = rp->getSpeed();
 						if (spd > 1) rp->setSpeed(spd / 2);
+						return;
 					}
 					else if (key == SDLK_ESCAPE)
 					{
-						_game->popState(); // exit replay
+						// Clean up replay state before exiting
+						_save->setReplayPlayer(nullptr);
+						_save->setBattleState(nullptr);
+						_game->getSavedGame()->setBattleGame(nullptr);
+						Options::baseXResolution = Options::baseXGeoscape;
+						Options::baseYResolution = Options::baseYGeoscape;
+						_game->getScreen()->resetDisplay(false);
+						_game->popState();
 						return;
 					}
 					// Allow arrow keys / PgUp/PgDn to pass through for camera

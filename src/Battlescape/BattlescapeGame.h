@@ -141,6 +141,7 @@ private:
 	BattlescapeState *_parentState;
 	std::list<BattleState*> _states, _deleted;
 	bool _playerPanicHandled;
+	bool _replayFinishedShown;
 	int _AIActionCounter;
 	BattleAction _currentAction;
 	bool _AISecondMove, _playedAggroSound;

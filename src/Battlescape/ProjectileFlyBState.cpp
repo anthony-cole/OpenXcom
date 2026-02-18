@@ -685,13 +685,10 @@ bool ProjectileFlyBState::createNewProjectile()
 			case V_FLOOR: impactStr = "FLOOR"; break;
 			case V_OUTOFBOUNDS: impactStr = "OUTOFBOUNDS"; break;
 			}
-			Position impactPos = projectile->getPosition(999999); // clamps to trajectory end = actual impact
 			Log(LOG_INFO) << mode << " trajectory: unit " << (_unit ? _unit->getId() : -1)
 				<< " round " << _action.autoShotCounter
 				<< " accuracy=" << accuracy
 				<< " impact=" << impactStr
-				<< " impactVoxel=" << impactPos.x << "," << impactPos.y << "," << impactPos.z
-				<< " impactTile=" << impactPos.toTile().x << "," << impactPos.toTile().y << "," << impactPos.toTile().z
 				<< " targetVoxel=" << _targetVoxel.x << "," << _targetVoxel.y << "," << _targetVoxel.z
 				<< " rngAfter=" << RNG::getSeed();
 		}

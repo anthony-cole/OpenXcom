@@ -73,6 +73,8 @@ void UnitWalkBState::init()
 		_beforeFirstStep = true;
 	}
 	_terrain->addMovingUnit(_unit);
+	if (_action.type == BA_NONE)
+		_action.type = BA_WALK;
 	_parent->recordPushedAction(this);
 }
 
@@ -279,7 +281,7 @@ void UnitWalkBState::think()
 			return;
 		}
 
-		if (onScreen || _parent->getSave()->getDebugMode())
+		if (onScreen || _parent->getSave()->getDebugMode() || _parent->getSave()->isReplayMode())
 		{
 			setNormalWalkSpeed();
 		}

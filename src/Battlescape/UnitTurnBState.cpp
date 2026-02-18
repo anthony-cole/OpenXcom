@@ -58,7 +58,16 @@ void UnitTurnBState::init()
 		_parent->popState();
 		return;
 	}
-	_parent->recordPushedAction(this);
+	// Only record standalone turns — fire-preceding turns inherit the shot's
+	// action type (BA_SNAPSHOT, BA_LAUNCH, etc.) and the shot itself gets recorded
+	// by ProjectileFlyBState.
+	if (_action.type == BA_NONE || _action.type == BA_TURN)
+	{
+		auto savedType = _action.type;
+		_action.type = BA_TURN;
+		_parent->recordPushedAction(this);
+		_action.type = savedType;
+	}
 	_action.clearTU();
 	if (_unit->getFaction() == FACTION_PLAYER)
 		_parent->setStateInterval(Options::battleXcomSpeed);

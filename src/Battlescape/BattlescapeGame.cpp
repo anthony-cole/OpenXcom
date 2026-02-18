@@ -179,7 +179,8 @@ bool BattleActionCost::spendTU(std::string *message)
 BattlescapeGame::BattlescapeGame(SavedBattleGame *save, BattlescapeState *parentState) :
 	_save(save), _parentState(parentState),
 	_playerPanicHandled(true), _AIActionCounter(0), _AISecondMove(false), _playedAggroSound(false),
-	_endTurnRequested(false), _endConfirmationHandled(false), _allEnemiesNeutralized(false)
+	_endTurnRequested(false), _endConfirmationHandled(false), _allEnemiesNeutralized(false),
+	_replayFinishedShown(false)
 {
 	if (_save->isPreview())
 	{
@@ -1186,11 +1187,22 @@ void BattlescapeGame::handleState()
 	auto *replayPlayer = _save->getReplayPlayer();
 	if (replayPlayer && !replayPlayer->isPaused() && _states.empty())
 	{
-		auto *ev = replayPlayer->getNextEventIfReady(_save->getReplayTick());
-		if (ev)
+		if (replayPlayer->isFinished())
 		{
-			executeReplayEvent(*ev);
-			replayPlayer->advanceEvent();
+			if (!_replayFinishedShown)
+			{
+				_replayFinishedShown = true;
+				_parentState->getGame()->pushState(new InfoboxOKState("Replay Complete"));
+			}
+		}
+		else
+		{
+			auto *ev = replayPlayer->getNextEventIfReady(_save->getReplayTick());
+			if (ev)
+			{
+				executeReplayEvent(*ev);
+				replayPlayer->advanceEvent();
+			}
 		}
 	}
 
@@ -1777,64 +1789,19 @@ void BattlescapeGame::recordPushedAction(BattleState *bs)
 	if (_save->getReplayPlayer()) return;
 
 	const BattleAction &a = bs->getAction();
-	BattleActionType effectiveType = a.type;
-
-	// Infer action type from the concrete BattleState subclass
-	if (effectiveType == BA_NONE)
-	{
-		if (dynamic_cast<UnitWalkBState*>(bs))
-			effectiveType = BA_WALK;
-		else if (dynamic_cast<UnitTurnBState*>(bs))
-			effectiveType = BA_TURN;
-		else
-			return; // Skip unknown BA_NONE states
-	}
-
-	// Skip internal turn states that precede a shot — those are pushed as
-	// the first part of a fire sequence and will replay automatically
-	if (dynamic_cast<UnitTurnBState*>(bs) && effectiveType == BA_TURN)
-	{
-		// Check if there's already a projectile state queued after this one.
-		// If so, this turn is just an aiming turn — don't record separately.
-		for (auto *s : _states)
-		{
-			if (s && dynamic_cast<ProjectileFlyBState*>(s))
-				return;
-		}
-	}
-
-	// Skip if no actor
-	if (!a.actor) return;
-
-	// Deduplicate: skip if same actor+action+target was just recorded.
-	// But never dedup shot actions — reaction fire legitimately fires multiple
-	// times at the same target with different RNG seeds.
-	static int lastActorId = -1;
-	static BattleActionType lastActionType = BA_NONE;
-	static Position lastTarget(-1, -1, -1);
-	int actorId = a.actor->getId();
-	bool isShotAction = (effectiveType == BA_SNAPSHOT || effectiveType == BA_AIMEDSHOT ||
-		effectiveType == BA_AUTOSHOT || effectiveType == BA_LAUNCH || effectiveType == BA_THROW);
-	if (!isShotAction && actorId == lastActorId && effectiveType == lastActionType &&
-		a.target == lastTarget)
-	{
-		return;
-	}
-	lastActorId = actorId;
-	lastActionType = effectiveType;
-	lastTarget = a.target;
+	if (!a.actor || a.type == BA_NONE) return;
 
 	std::ostringstream payload;
-	payload << "action: " << battleActionToString(effectiveType);
+	payload << "action: " << battleActionToString(a.type);
 	if (a.target != Position(-1, -1, -1))
 		payload << " target: " << a.target.x << "," << a.target.y << "," << a.target.z;
-	if (a.weapon && effectiveType != BA_WALK && effectiveType != BA_KNEEL && effectiveType != BA_TURN)
+	if (a.weapon && a.type != BA_WALK && a.type != BA_KNEEL && a.type != BA_TURN)
 		payload << " weapon: " << a.weapon->getRules()->getType();
 	// Tag reaction fire so it can be skipped during replay (it happens naturally from walks)
-	if (a.actor && a.actor->getFaction() != _save->getSide())
+	if (a.actor->getFaction() != _save->getSide())
 		payload << " reactionFire: true";
 	// Record the full path for walks so replay doesn't depend on pathfinding
-	if (effectiveType == BA_WALK)
+	if (a.type == BA_WALK)
 	{
 		const auto &path = _save->getPathfinding()->getPath();
 		if (!path.empty())
