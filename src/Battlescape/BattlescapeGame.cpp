@@ -1601,10 +1601,7 @@ void BattlescapeGame::recordPushedAction(BattleState *bs)
 void BattlescapeGame::statePushFront(BattleState *bs)
 {
 	_states.push_front(bs);
-	if (bs)
-	{
-		bs->init();
-	}
+	bs->init();
 }
 
 /**
@@ -1616,10 +1613,7 @@ void BattlescapeGame::statePushNext(BattleState *bs)
 	if (_states.empty())
 	{
 		_states.push_front(bs);
-		if (bs)
-		{
-			bs->init();
-		}
+		bs->init();
 	}
 	else
 	{
@@ -1644,7 +1638,7 @@ void BattlescapeGame::statePushBack(BattleState *bs)
 			endTurn();
 			return;
 		}
-		else if (bs)
+		else
 		{
 			bs->init();
 		}
@@ -2065,7 +2059,6 @@ bool BattlescapeGame::handlePanickingUnit(BattleUnit *unit)
   */
 bool BattlescapeGame::cancelCurrentAction(bool bForce)
 {
-
 	bool bPreviewed = Options::battleNewPreviewPath != PATH_NONE;
 
 	if (_save->getPathfinding()->removePreview() && bPreviewed) return true;
@@ -2458,7 +2451,6 @@ void BattlescapeGame::primaryAction(Position pos)
  */
 void BattlescapeGame::secondaryAction(Position pos)
 {
-
 	//  -= turn to or open door =-
 	_currentAction.target = pos;
 	_currentAction.actor = _save->getSelectedUnit();
@@ -2471,8 +2463,6 @@ void BattlescapeGame::secondaryAction(Position pos)
  */
 void BattlescapeGame::launchAction()
 {
-
-
 	_parentState->showLaunchButton(false);
 	getMap()->getWaypoints()->clear();
 	_currentAction.target = _currentAction.waypoints.front();
@@ -2620,6 +2610,7 @@ void BattlescapeGame::requestEndTurn(bool askForConfirmation)
 /**
  * Sets the TU reserved type.
  * @param tur A BattleActionType.
+ * @param player is this requested by the player?
  */
 void BattlescapeGame::setTUReserved(BattleActionType tur)
 {
@@ -2936,7 +2927,7 @@ void BattlescapeGame::removeSummonedPlayerUnits()
 }
 
 /**
- * Tallies summoned player-controlled VIPs. We may still need to correct this in the Debriefing.
+ * Tally summoned player-controlled VIPs. We may still need to correct this in the Debriefing.
  */
 void BattlescapeGame::tallySummonedVIPs()
 {

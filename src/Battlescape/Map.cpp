@@ -390,8 +390,7 @@ void Map::setPalette(const SDL_Color *colors, int firstcolor, int ncolors)
 	Surface::setPalette(colors, firstcolor, ncolors);
 	for (auto* mds : *_save->getMapDataSets())
 	{
-		if (mds->getSurfaceset())
-			mds->getSurfaceset()->setPalette(colors, firstcolor, ncolors);
+		mds->getSurfaceset()->setPalette(colors, firstcolor, ncolors);
 	}
 	_message->setPalette(colors, firstcolor, ncolors);
 	refreshHiddenMovementBackground();
