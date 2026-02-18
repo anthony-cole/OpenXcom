@@ -1858,7 +1858,6 @@ void BattlescapeGame::statePushFront(BattleState *bs)
 	_states.push_front(bs);
 	if (bs)
 	{
-		recordPushedAction(bs);
 		bs->init();
 	}
 }
@@ -1874,17 +1873,12 @@ void BattlescapeGame::statePushNext(BattleState *bs)
 		_states.push_front(bs);
 		if (bs)
 		{
-			recordPushedAction(bs);
 			bs->init();
 		}
 	}
 	else
 	{
 		_states.insert(++_states.begin(), bs);
-		if (bs)
-		{
-			recordPushedAction(bs);
-		}
 	}
 
 }
@@ -1907,17 +1901,12 @@ void BattlescapeGame::statePushBack(BattleState *bs)
 		}
 		else if (bs)
 		{
-			recordPushedAction(bs);
 			bs->init();
 		}
 	}
 	else
 	{
 		_states.push_back(bs);
-		if (bs)
-		{
-			recordPushedAction(bs);
-		}
 	}
 }
 

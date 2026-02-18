@@ -58,6 +58,7 @@ void UnitTurnBState::init()
 		_parent->popState();
 		return;
 	}
+	_parent->recordPushedAction(this);
 	_action.clearTU();
 	if (_unit->getFaction() == FACTION_PLAYER)
 		_parent->setStateInterval(Options::battleXcomSpeed);

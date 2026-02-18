@@ -116,6 +116,8 @@ void MeleeAttackBState::init()
 		return;
 	}
 
+	_parent->recordPushedAction(this);
+
 	// terrain melee
 	if (terrainMeleeTilePart > 0)
 	{

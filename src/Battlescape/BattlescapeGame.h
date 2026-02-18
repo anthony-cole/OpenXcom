@@ -159,8 +159,6 @@ private:
 	bool handlePanickingUnit(BattleUnit *unit);
 	/// Determines whether there are any actions pending for the given unit.
 	bool noActionsPending(BattleUnit *bu);
-	/// Records a pushed BattleState action for replay.
-	void recordPushedAction(BattleState *bs);
 	std::vector<InfoboxOKState*> _infoboxQueue;
 	/// Shows the infoboxes in the queue (if any).
 	void showInfoBoxQueue();
@@ -299,6 +297,8 @@ public:
 
 	/// Records a battle event for replay
 	void recordBattleEvent(const std::string &eventType, BattleUnit *actor = nullptr, const std::string &payload = "");
+	/// Records a BattleState action for replay. Called from state init() after validation.
+	void recordPushedAction(BattleState *bs);
 	/// Executes a single replay event, dispatching to appropriate state.
 	void executeReplayEvent(const Replay::ReplayEvent &ev);
 

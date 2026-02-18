@@ -73,10 +73,7 @@ void ProjectileFlyBState::init()
 	if (_initialized) return;
 	_initialized = true;
 
-	// Replay RNG sync: restore or capture the RNG seed at the exact point
-	// where the projectile trajectory is about to be calculated.
-	// This is more precise than the seed captured at event recording time,
-	// since UnitTurnBState or other intermediate logic may have consumed RNG.
+	// Replay RNG sync: restore the RNG seed for deterministic replay.
 	if (_action.replayRngSeed != 0 && _parent->getSave()->isReplayMode())
 	{
 		Log(LOG_DEBUG) << "Replay: restoring projectile RNG seed " << _action.replayRngSeed
@@ -84,13 +81,6 @@ void ProjectileFlyBState::init()
 		RNG::setSeed(_action.replayRngSeed);
 		// Clear so cascade segments (blaster bomb waypoints) don't re-restore
 		_action.replayRngSeed = 0;
-	}
-	else if (auto *rec = _parent->getSave()->getRecorder())
-	{
-		if (rec->isRecording())
-		{
-			rec->updateLastProjectileRngSeed(RNG::getSeed());
-		}
 	}
 
 	BattleItem *weapon = _action.weapon;
@@ -181,6 +171,12 @@ void ProjectileFlyBState::init()
 			_unit->turn(_unit->getTurretType() != -1);
 		}
 	}
+
+	// Record now that all validation passed and the shot will actually proceed.
+	// Recording is done at init time (not push time) so that cancelled actions
+	// (dead target, no TU, no ammo) don't produce ghost events, and the RNG
+	// seed is captured at the correct moment.
+	_parent->recordPushedAction(this);
 
 	Tile *endTile = _parent->getSave()->getTile(_action.target);
 	int distanceSq = _action.actor->distance3dToPositionSq(_action.target);
