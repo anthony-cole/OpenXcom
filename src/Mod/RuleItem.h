@@ -85,6 +85,9 @@ enum BattleActionType : Uint8
 	BA_SELF_DESTRUCT = 19,
 };
 
+const char* battleActionToString(BattleActionType type);
+BattleActionType battleActionFromString(const std::string &s);
+
 enum class BattleActionOrigin { CENTRE = 0, LEFT, RIGHT }; // Used for off-centre shooting.
 
 struct BattleActionCost;

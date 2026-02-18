@@ -1,9 +1,6 @@
 #include "ReplaySaver.h"
 #include "SavedBattleGame.h"
-#include "../Engine/CrossPlatform.h"
 #include "../Engine/Logger.h"
-#include "../Engine/RNG.h"
-#include <fstream>
 #include "../Replay/Replay.h"
 
 namespace OpenXcom

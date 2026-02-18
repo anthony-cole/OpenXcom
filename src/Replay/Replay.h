@@ -3,6 +3,8 @@
 #include <vector>
 #include <cstdint>
 #include <cinttypes>
+#include "../Battlescape/Position.h"
+#include "../Mod/RuleItem.h"
 
 namespace OpenXcom
 {
@@ -11,6 +13,25 @@ namespace YAML { class YamlNodeWriter; class YamlString; }
 
 namespace Replay
 {
+
+/// Parsed fields from a STATE_ACTION event payload.
+struct ParsedStateAction
+{
+    BattleActionType actionType = BA_NONE;
+    Position target{-1, -1, -1};
+    std::string weaponType;
+    int value = 0;
+    std::vector<int> path;
+    bool reactionFire = false;
+};
+
+/// Parse the payload string of a STATE_ACTION event.
+ParsedStateAction parseStateActionPayload(const std::string &payload);
+
+/// Trim a recorded walk path using WALK_END lookahead from the replay player.
+void trimWalkPathFromReplay(std::vector<int> &path, const class ReplayPlayer *player,
+                            int actorId, const Position &actorPos);
+
 struct ReplayEvent
 {
     uint64_t tick = 0;
@@ -41,13 +62,7 @@ public:
     const std::vector<ReplayEvent>& getEvents() const { return _events; }
     const std::string& getInitialSaveYaml() const { return _initialSaveYaml; }
     bool isRecording() const { return _recording; }
-    // Update the rngSeed on the most recently recorded STATE_ACTION event.
-    // Used to capture the RNG state at ProjectileFlyBState::init() time
-    // (more precise than the seed captured at event recording time).
-    void updateLastProjectileRngSeed(uint64_t seed);
-    void updateLastExplosionSeed(uint64_t seed);
-    void updateLastHitSeed(uint64_t seed);
-    /// Unified damage seed: sets explosionSeed on most recent STATE_ACTION only if empty (0).
+    /// Sets explosionSeed on most recent STATE_ACTION only if empty (0).
     void updateLastDamageSeed(uint64_t seed);
 
 private:

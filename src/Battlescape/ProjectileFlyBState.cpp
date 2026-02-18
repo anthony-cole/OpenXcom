@@ -39,8 +39,6 @@
 #include "BattlescapeState.h"
 #include "../Savegame/BattleUnitStatistics.h"
 #include "../fmath.h"
-#include "../Replay/Replay.h"
-#include "../Engine/Logger.h"
 
 namespace OpenXcom
 {
@@ -76,8 +74,6 @@ void ProjectileFlyBState::init()
 	// Replay RNG sync: restore the RNG seed for deterministic replay.
 	if (_action.replayRngSeed != 0 && _parent->getSave()->isReplayMode())
 	{
-		Log(LOG_DEBUG) << "Replay: restoring projectile RNG seed " << _action.replayRngSeed
-			<< " for unit " << (_action.actor ? _action.actor->getId() : -1);
 		RNG::setSeed(_action.replayRngSeed);
 		// Clear so cascade segments (blaster bomb waypoints) don't re-restore
 		_action.replayRngSeed = 0;
@@ -115,9 +111,6 @@ void ProjectileFlyBState::init()
 		{
 			if (_parent->getSave()->isReplayMode())
 			{
-				Log(LOG_WARNING) << "Replay: no ammo for " << (_action.actor ? _action.actor->getId() : -1)
-					<< " action type " << _action.type << ", forcing shot anyway";
-				// Try to use the weapon itself as ammo fallback
 				_ammo = _action.weapon;
 			}
 			else
@@ -131,11 +124,6 @@ void ProjectileFlyBState::init()
 	if (_unit->isOut() || _unit->isOutThresholdExceed())
 	{
 		// something went wrong - we can't shoot when dead or unconscious, or if we're about to fall over.
-		// In replay mode, log but still skip (unit may have been killed by divergent earlier events)
-		if (_parent->getSave()->isReplayMode())
-		{
-			Log(LOG_WARNING) << "Replay: shooter unit " << _unit->getId() << " is out/dead, skipping shot";
-		}
 		_parent->popState();
 		return;
 	}
@@ -160,7 +148,6 @@ void ProjectileFlyBState::init()
 			// In replay mode, still skip if target is dead/out
 			if (target && (target->isOut() || target->isOutThresholdExceed()))
 			{
-				Log(LOG_WARNING) << "Replay: reaction fire target is out/dead, skipping shot";
 				_parent->popState();
 				return;
 			}
@@ -337,15 +324,6 @@ void ProjectileFlyBState::init()
 	bool forceEnableObstacles = false;
 	if (_action.type == BA_LAUNCH || (Options::forceFire && _parent->getSave()->isCtrlPressed(true) && isPlayer) || !_parent->getPanicHandled())
 	{
-		// Replay diagnostics: which condition triggered tile-center targeting?
-		if (_parent->getSave()->isReplayMode())
-		{
-			Log(LOG_INFO) << "Replay targeting: unit " << (_unit ? _unit->getId() : -1)
-				<< " TILE-CENTER path: actionType=" << _action.type
-				<< " isLaunch=" << (_action.type == BA_LAUNCH)
-				<< " forceFire=" << (Options::forceFire && _parent->getSave()->isCtrlPressed(true) && isPlayer)
-				<< " panicNotHandled=" << (!_parent->getPanicHandled());
-		}
 		// target nothing, targets the middle of the tile
 		_targetVoxel = _action.target.toVoxel() + TileEngine::voxelTileCenter;
 		if (_action.type == BA_LAUNCH)
@@ -370,21 +348,6 @@ void ProjectileFlyBState::init()
 		// Store this target voxel.
 		Tile *targetTile = _parent->getSave()->getTile(_action.target);
 		Position originVoxel = _parent->getTileEngine()->getOriginVoxel(_action, _parent->getSave()->getTile(_origin));
-
-		// Diagnostics: log targeting details (for both recording and replay)
-		{
-			const char *mode = _parent->getSave()->isReplayMode() ? "Replay" : "Battle";
-			BattleUnit *tileUnit = targetTile ? targetTile->getUnit() : nullptr;
-			Log(LOG_INFO) << mode << " targeting: unit " << (_unit ? _unit->getId() : -1)
-				<< " action " << _action.type
-				<< " at target " << _action.target.x << "," << _action.target.y << "," << _action.target.z
-				<< " | tileHasUnit=" << (tileUnit != nullptr)
-				<< " unitId=" << (tileUnit ? tileUnit->getId() : -1)
-				<< " unitVisible=" << (tileUnit ? tileUnit->getVisible() : false)
-				<< " unitPos=" << (tileUnit ? tileUnit->getPosition().x : -1) << "," << (tileUnit ? tileUnit->getPosition().y : -1) << "," << (tileUnit ? tileUnit->getPosition().z : -1)
-				<< " shooterFaction=" << _unit->getFaction()
-				<< " rngSeed=" << RNG::getSeed();
-		}
 
 		if (targetTile->getUnit() &&
 			((_unit->getFaction() != FACTION_PLAYER) ||
@@ -429,8 +392,6 @@ void ProjectileFlyBState::init()
 						{
 							_targetVoxel = targetUnit->getPosition().toVoxel()
 								+ Position(8, 8, targetUnit->getFloatHeight() + targetUnit->getHeight() / 2 + 1);
-							Log(LOG_INFO) << "Replay: canTargetUnit failed, using unit body center fallback "
-								<< _targetVoxel.x << "," << _targetVoxel.y << "," << _targetVoxel.z;
 						}
 						else
 						{
@@ -448,11 +409,6 @@ void ProjectileFlyBState::init()
 				}
 			}
 
-			{
-				const char *mode = _parent->getSave()->isReplayMode() ? "Replay" : "Battle";
-				Log(LOG_INFO) << mode << " targeting: aimed at UNIT, targetVoxel="
-					<< _targetVoxel.x << "," << _targetVoxel.y << "," << _targetVoxel.z;
-			}
 		}
 		else if (targetTile->getMapData(O_OBJECT) != 0)
 		{
@@ -460,8 +416,6 @@ void ProjectileFlyBState::init()
 			{
 				_targetVoxel = _action.target.toVoxel() + Position(8, 8, 10);
 			}
-			if (_parent->getSave()->isReplayMode())
-				Log(LOG_INFO) << "Replay targeting: aimed at OBJECT, targetVoxel=" << _targetVoxel.x << "," << _targetVoxel.y << "," << _targetVoxel.z;
 		}
 		else if (targetTile->getMapData(O_NORTHWALL) != 0)
 		{
@@ -469,8 +423,6 @@ void ProjectileFlyBState::init()
 			{
 				_targetVoxel = _action.target.toVoxel() + Position(8, 0, 9);
 			}
-			if (_parent->getSave()->isReplayMode())
-				Log(LOG_INFO) << "Replay targeting: aimed at NORTHWALL, targetVoxel=" << _targetVoxel.x << "," << _targetVoxel.y << "," << _targetVoxel.z;
 		}
 		else if (targetTile->getMapData(O_WESTWALL) != 0)
 		{
@@ -478,8 +430,6 @@ void ProjectileFlyBState::init()
 			{
 				_targetVoxel = _action.target.toVoxel() + Position(0, 8, 9);
 			}
-			if (_parent->getSave()->isReplayMode())
-				Log(LOG_INFO) << "Replay targeting: aimed at WESTWALL, targetVoxel=" << _targetVoxel.x << "," << _targetVoxel.y << "," << _targetVoxel.z;
 		}
 		else if (targetTile->getMapData(O_FLOOR) != 0)
 		{
@@ -487,16 +437,12 @@ void ProjectileFlyBState::init()
 			{
 				_targetVoxel = _action.target.toVoxel() + Position(8, 8, 2);
 			}
-			if (_parent->getSave()->isReplayMode())
-				Log(LOG_INFO) << "Replay targeting: aimed at FLOOR, targetVoxel=" << _targetVoxel.x << "," << _targetVoxel.y << "," << _targetVoxel.z;
 		}
 		else
 		{
 			// dummy attempt (only to highlight obstacles)
 			_parent->getTileEngine()->canTargetTile(&originVoxel, targetTile, MapData::O_DUMMY, &_targetVoxel, _unit, isPlayer);
 
-			if (_parent->getSave()->isReplayMode())
-				Log(LOG_INFO) << "Replay targeting: aimed at EMPTY TILE (center), targetVoxel will be tile center";
 			// target nothing, targets the middle of the tile
 			_targetVoxel = _action.target.toVoxel() + TileEngine::voxelTileCenter;
 		}
@@ -650,18 +596,6 @@ bool ProjectileFlyBState::createNewProjectile()
 	else
 	{
 		double accuracy = BattleUnit::getFiringAccuracy(attack, _parent->getMod()) / accuracyDivider;
-		{
-			const char *mode = _parent->getSave()->isReplayMode() ? "Replay" : "Battle";
-			Position diagOrigin = (_originVoxel != TileEngine::invalid)
-				? _originVoxel
-				: _parent->getTileEngine()->getOriginVoxel(_action, _parent->getSave()->getTile(_origin));
-			Log(LOG_INFO) << mode << " pre-trajectory: unit " << (_unit ? _unit->getId() : -1)
-				<< " originVoxel=" << diagOrigin.x << "," << diagOrigin.y << "," << diagOrigin.z
-				<< " originTile=" << diagOrigin.toTile().x << "," << diagOrigin.toTile().y << "," << diagOrigin.toTile().z
-				<< " unitPos=" << (_unit ? _unit->getPosition().x : -1) << "," << (_unit ? _unit->getPosition().y : -1) << "," << (_unit ? _unit->getPosition().z : -1)
-				<< " baseAccuracy=" << accuracy
-				<< " rngBefore=" << RNG::getSeed();
-		}
 		if (_originVoxel != TileEngine::invalid)
 		{
 			_projectileImpact = projectile->calculateTrajectory(accuracy, _originVoxel, false);
@@ -669,28 +603,6 @@ bool ProjectileFlyBState::createNewProjectile()
 		else
 		{
 			_projectileImpact = projectile->calculateTrajectory(accuracy);
-		}
-
-		// Diagnostics: log trajectory result (for both recording and replay)
-		{
-			const char *mode = _parent->getSave()->isReplayMode() ? "Replay" : "Battle";
-			const char *impactStr = "?";
-			switch (_projectileImpact)
-			{
-			case V_EMPTY: impactStr = "EMPTY"; break;
-			case V_UNIT: impactStr = "UNIT"; break;
-			case V_NORTHWALL: impactStr = "NORTHWALL"; break;
-			case V_WESTWALL: impactStr = "WESTWALL"; break;
-			case V_OBJECT: impactStr = "OBJECT"; break;
-			case V_FLOOR: impactStr = "FLOOR"; break;
-			case V_OUTOFBOUNDS: impactStr = "OUTOFBOUNDS"; break;
-			}
-			Log(LOG_INFO) << mode << " trajectory: unit " << (_unit ? _unit->getId() : -1)
-				<< " round " << _action.autoShotCounter
-				<< " accuracy=" << accuracy
-				<< " impact=" << impactStr
-				<< " targetVoxel=" << _targetVoxel.x << "," << _targetVoxel.y << "," << _targetVoxel.z
-				<< " rngAfter=" << RNG::getSeed();
 		}
 
 		if (_targetVoxel != TileEngine::invalid.toVoxel() && (_projectileImpact != V_EMPTY || _action.type == BA_LAUNCH))

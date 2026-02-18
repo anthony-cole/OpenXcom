@@ -154,6 +154,8 @@ private:
 
 	/// Ends the turn.
 	void endTurn();
+	/// Finds a weapon on a unit by its rule type name (inventory + special weapons).
+	BattleItem *findWeaponByType(BattleUnit *actor, const std::string &weaponType) const;
 	/// Picks the first soldier that is panicking.
 	bool handlePanickingPlayer();
 	/// Common function for handling panicking units.

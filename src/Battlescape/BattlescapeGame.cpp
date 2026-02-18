@@ -1223,56 +1223,28 @@ void BattlescapeGame::handleState()
 	}
 }
 
-namespace
+/**
+ * Finds a weapon on a unit by its rule type name.
+ * Searches inventory first, then special weapons (psi amps, built-in weapons).
+ * @param actor The unit to search.
+ * @param weaponType The rule type name to match.
+ * @return Pointer to the weapon, or nullptr if not found.
+ */
+BattleItem *BattlescapeGame::findWeaponByType(BattleUnit *actor, const std::string &weaponType) const
 {
-const char* battleActionToString(BattleActionType type)
-{
-	switch (type)
+	for (auto *item : *actor->getInventory())
 	{
-	case BA_NONE:           return "BA_NONE";
-	case BA_TURN:           return "BA_TURN";
-	case BA_WALK:           return "BA_WALK";
-	case BA_KNEEL:          return "BA_KNEEL";
-	case BA_PRIME:          return "BA_PRIME";
-	case BA_UNPRIME:        return "BA_UNPRIME";
-	case BA_THROW:          return "BA_THROW";
-	case BA_AUTOSHOT:       return "BA_AUTOSHOT";
-	case BA_SNAPSHOT:       return "BA_SNAPSHOT";
-	case BA_AIMEDSHOT:      return "BA_AIMEDSHOT";
-	case BA_HIT:            return "BA_HIT";
-	case BA_USE:            return "BA_USE";
-	case BA_LAUNCH:         return "BA_LAUNCH";
-	case BA_MINDCONTROL:    return "BA_MINDCONTROL";
-	case BA_PANIC:          return "BA_PANIC";
-	case BA_RETHINK:        return "BA_RETHINK";
-	case BA_CQB:            return "BA_CQB";
-	default:                return "BA_NONE";
+		if (item->getRules()->getType() == weaponType)
+			return item;
 	}
+	for (int bt = BT_FIREARM; bt <= BT_CORPSE; ++bt)
+	{
+		BattleItem *sw = actor->getSpecialWeapon(static_cast<BattleType>(bt));
+		if (sw && sw->getRules()->getType() == weaponType)
+			return sw;
+	}
+	return nullptr;
 }
-
-BattleActionType battleActionFromString(const std::string &s)
-{
-	if (s == "BA_TURN")         return BA_TURN;
-	if (s == "BA_WALK")         return BA_WALK;
-	if (s == "BA_KNEEL")        return BA_KNEEL;
-	if (s == "BA_PRIME")        return BA_PRIME;
-	if (s == "BA_UNPRIME")      return BA_UNPRIME;
-	if (s == "BA_THROW")        return BA_THROW;
-	if (s == "BA_AUTOSHOT")     return BA_AUTOSHOT;
-	if (s == "BA_SNAPSHOT")     return BA_SNAPSHOT;
-	if (s == "BA_AIMEDSHOT")    return BA_AIMEDSHOT;
-	if (s == "BA_HIT")          return BA_HIT;
-	if (s == "BA_USE")          return BA_USE;
-	if (s == "BA_LAUNCH")       return BA_LAUNCH;
-	if (s == "BA_MINDCONTROL")  return BA_MINDCONTROL;
-	if (s == "BA_PANIC")        return BA_PANIC;
-	if (s == "BA_RETHINK")      return BA_RETHINK;
-	if (s == "BA_CQB")          return BA_CQB;
-	// Fallback: try parsing as integer for backwards compat with old replays
-	try { return static_cast<BattleActionType>(std::stoi(s)); }
-	catch (...) { return BA_NONE; }
-}
-} // anonymous namespace
 
 /**
  * Executes a single replay event by parsing its type and payload,
@@ -1298,61 +1270,9 @@ void BattlescapeGame::executeReplayEvent(const Replay::ReplayEvent &ev)
 
 	if (ev.type == "STATE_ACTION")
 	{
-		// Parse payload: "action: BA_WALK target: X,Y,Z weapon: TYPE value: N path: 2,3,2,2 reactionFire: true"
-		std::string actionStr;
-		int tx = -1, ty = -1, tz = -1;
-		std::string weaponType;
-		int actionValue = 0;
-		std::vector<int> recordedPath;
-		bool isReactionFire = false;
+		Replay::ParsedStateAction parsed = Replay::parseStateActionPayload(ev.payload);
 
-		std::istringstream ss(ev.payload);
-		std::string token;
-		while (ss >> token)
-		{
-			if (token == "action:")
-				ss >> actionStr;
-			else if (token == "target:")
-			{
-				char comma;
-				ss >> tx >> comma >> ty >> comma >> tz;
-			}
-			else if (token == "weapon:")
-				ss >> weaponType;
-			else if (token == "value:")
-				ss >> actionValue;
-			else if (token == "reactionFire:")
-			{
-				std::string val;
-				ss >> val;
-				isReactionFire = (val == "true");
-			}
-			else if (token == "path:")
-			{
-				std::string pathStr;
-				ss >> pathStr;
-				std::istringstream ps(pathStr);
-				int dir;
-				while (ps >> dir)
-				{
-					recordedPath.push_back(dir);
-					char c;
-					if (!(ps >> c)) break; // skip comma
-				}
-			}
-		}
-		BattleActionType actionType = battleActionFromString(actionStr);
-
-		// Find the actor unit
-		BattleUnit *actor = nullptr;
-		for (auto *u : *_save->getUnits())
-		{
-			if (u->getId() == ev.actorId)
-			{
-				actor = u;
-				break;
-			}
-		}
+		BattleUnit *actor = _save->findUnitById(ev.actorId);
 		if (!actor)
 		{
 			Log(LOG_WARNING) << "Replay: could not find unit " << ev.actorId << " for STATE_ACTION";
@@ -1361,12 +1281,10 @@ void BattlescapeGame::executeReplayEvent(const Replay::ReplayEvent &ev)
 
 		// For reaction fire, the "selected unit" must be the TARGET (the walking unit),
 		// not the shooter. ProjectileFlyBState::init() checks target == selectedUnit.
-		if (isReactionFire)
+		if (parsed.reactionFire)
 		{
-			// Center camera on target position (where the shot is aimed)
-			getMap()->getCamera()->centerOnPosition(Position(tx, ty, tz));
-			// Find the target unit at the shot position and set it as selected
-			Tile *targetTile = _save->getTile(Position(tx, ty, tz));
+			getMap()->getCamera()->centerOnPosition(parsed.target);
+			Tile *targetTile = _save->getTile(parsed.target);
 			BattleUnit *targetUnit = targetTile ? targetTile->getUnit() : nullptr;
 			if (targetUnit)
 			{
@@ -1374,59 +1292,30 @@ void BattlescapeGame::executeReplayEvent(const Replay::ReplayEvent &ev)
 			}
 			else
 			{
-				Log(LOG_WARNING) << "Replay: reaction fire target tile " << tx << "," << ty << "," << tz
+				Log(LOG_WARNING) << "Replay: reaction fire target tile " << parsed.target.x << "," << parsed.target.y << "," << parsed.target.z
 					<< " has no unit (shooter=" << ev.actorId << ")";
 			}
 		}
 		else
 		{
-			// Center camera on acting unit
 			getMap()->getCamera()->centerOnPosition(actor->getPosition());
-			// Select the unit
 			_save->setSelectedUnit(actor);
 		}
 		_parentState->updateSoldierInfo();
 
-		// Find weapon in inventory or special weapons (skip for actions that don't use weapons)
+		// Find weapon (skip for actions that don't use weapons)
 		BattleItem *weapon = nullptr;
-		if (!weaponType.empty() && actionType != BA_WALK && actionType != BA_KNEEL && actionType != BA_TURN)
+		if (!parsed.weaponType.empty() && parsed.actionType != BA_WALK && parsed.actionType != BA_KNEEL && parsed.actionType != BA_TURN)
 		{
-			for (auto *item : *actor->getInventory())
-			{
-				if (item->getRules()->getType() == weaponType)
-				{
-					weapon = item;
-					break;
-				}
-			}
-			// Also check special weapons (psi amps, built-in weapons)
+			weapon = findWeaponByType(actor, parsed.weaponType);
 			if (!weapon)
 			{
-				for (int bt = BT_FIREARM; bt <= BT_CORPSE; ++bt)
-				{
-					BattleItem *sw = actor->getSpecialWeapon(static_cast<BattleType>(bt));
-					if (sw && sw->getRules()->getType() == weaponType)
-					{
-						weapon = sw;
-						break;
-					}
-				}
-			}
-			if (!weapon)
-			{
-				Log(LOG_WARNING) << "Replay: could not find weapon '" << weaponType
-					<< "' for unit " << ev.actorId;
-				// Skip shot/throw events when weapon is missing (unit may be stunned/dead and dropped it)
-				if (actionType != BA_WALK && actionType != BA_KNEEL && actionType != BA_TURN)
-				{
-					Log(LOG_WARNING) << "Replay: skipping action for unit " << ev.actorId
-						<< " (no weapon, unit may be stunned/dead)";
-					return;
-				}
+				Log(LOG_WARNING) << "Replay: could not find weapon '" << parsed.weaponType
+					<< "' for unit " << ev.actorId << ", skipping action";
+				return;
 			}
 		}
 
-		// Skip actions for dead or stunned units (except if already handled above)
 		if (actor->isOut())
 		{
 			Log(LOG_WARNING) << "Replay: skipping action for unit " << ev.actorId
@@ -1436,10 +1325,10 @@ void BattlescapeGame::executeReplayEvent(const Replay::ReplayEvent &ev)
 
 		// Build BattleAction
 		BattleAction action;
-		action.type = actionType;
+		action.type = parsed.actionType;
 		action.actor = actor;
 		action.weapon = weapon;
-		action.target = Position(tx, ty, tz);
+		action.target = parsed.target;
 		action.cameraPosition = getMap()->getCamera()->getMapOffset();
 
 		// Dispatch based on action type
@@ -1447,106 +1336,17 @@ void BattlescapeGame::executeReplayEvent(const Replay::ReplayEvent &ev)
 		{
 		case BA_WALK:
 		{
-			// In replay mode, don't let the engine independently stop walks for spotted enemies.
-			// Walk interruptions are already captured in the replay via WALK_END events and path trimming.
+			// Walk interruptions are captured in the replay via WALK_END events and path trimming.
 			action.ignoreSpottedEnemies = true;
 
 			Log(LOG_INFO) << "Replay: unit " << ev.actorId << " walk from "
 				<< actor->getPosition().x << "," << actor->getPosition().y << "," << actor->getPosition().z
-				<< " to " << tx << "," << ty << "," << tz;
+				<< " to " << parsed.target.x << "," << parsed.target.y << "," << parsed.target.z;
 
-			// Peek ahead for WALK_END to determine actual walk endpoint.
-			// If the walk was interrupted (reaction fire, spotted enemies, etc.),
-			// we need to trim the path so the unit stops at the right position.
-			if (!recordedPath.empty())
-			{
-				auto *replayPlayerPtr = _save->getReplayPlayer();
-				if (replayPlayerPtr)
-				{
-					const auto &allEvents = replayPlayerPtr->getEvents();
-					size_t curIdx = replayPlayerPtr->getCurrentIndex();
-					// Scan ahead to find the LAST WALK_END for this actor before its next STATE_ACTION.
-					// A walk can produce multiple WALK_END events (one per step if interrupted mid-walk),
-					// and we need the final one to know where the unit actually ended up.
-					Position walkEndPos;
-					bool foundWalkEnd = false;
-					for (size_t i = curIdx + 1; i < allEvents.size(); ++i)
-					{
-						// Stop scanning if we hit another STATE_ACTION for the same actor
-						// (that would be the next action, not our WALK_END)
-						if (allEvents[i].type == "STATE_ACTION" && allEvents[i].actorId == ev.actorId)
-							break;
-						if (allEvents[i].type == "WALK_END" && allEvents[i].actorId == ev.actorId)
-						{
-							auto endPosStr = allEvents[i].payload.find("endPos: ");
-							if (endPosStr != std::string::npos)
-							{
-								int ex, ey, ez;
-								if (sscanf(allEvents[i].payload.c_str() + endPosStr + 8, "%d,%d,%d", &ex, &ey, &ez) == 3)
-								{
-									walkEndPos = Position(ex, ey, ez);
-									foundWalkEnd = true;
-									// Don't break — keep scanning for later WALK_ENDs
-								}
-							}
-						}
-					}
-					// Trim path if the final walk end position differs from the target
-					if (foundWalkEnd)
-					{
-						Position walkTarget(tx, ty, tz);
-						if (walkEndPos != walkTarget)
-						{
-							// Simulate the path from actor's current position.
-							// Path is LIFO: last element = first step.
-							// Note: directionToVector only gives horizontal deltas (dx,dy,0),
-							// so we compare only x,y to handle ramp/staircase level changes.
-							Position pos = actor->getPosition();
-							size_t stepsNeeded = 0;
-							bool found = false;
-							for (int pi = recordedPath.size() - 1; pi >= 0; --pi)
-							{
-								Position delta;
-								Pathfinding::directionToVector(recordedPath[pi], &delta);
-								pos += delta;
-								stepsNeeded++;
-								if (pos.x == walkEndPos.x && pos.y == walkEndPos.y)
-								{
-									found = true;
-									break;
-								}
-							}
-							if (found && stepsNeeded < recordedPath.size())
-							{
-								Log(LOG_INFO) << "Replay: trimming walk path for unit " << ev.actorId
-									<< " from " << recordedPath.size() << " to " << stepsNeeded << " steps"
-									<< " (interrupted at " << walkEndPos.x << "," << walkEndPos.y << "," << walkEndPos.z << ")";
-								// Keep only the last stepsNeeded elements (LIFO order)
-								recordedPath.erase(recordedPath.begin(),
-									recordedPath.begin() + (recordedPath.size() - stepsNeeded));
-							}
-						}
-					}
-				}
-				// Use the (possibly trimmed) recorded path
-				_save->getPathfinding()->setPath(recordedPath);
-				statePushBack(new UnitWalkBState(this, action));
-			}
-			else
-			{
-				// Fallback for old replays without recorded paths
-				_save->getPathfinding()->calculate(actor, action.target, BAM_NORMAL);
-				if (_save->getPathfinding()->getStartDirection() != -1)
-				{
-					statePushBack(new UnitWalkBState(this, action));
-				}
-				else
-				{
-					Log(LOG_WARNING) << "Replay: pathfinding FAILED for unit " << ev.actorId
-						<< " at " << actor->getPosition().x << "," << actor->getPosition().y << "," << actor->getPosition().z
-						<< " to " << tx << "," << ty << "," << tz;
-				}
-			}
+			Replay::trimWalkPathFromReplay(parsed.path, _save->getReplayPlayer(),
+				ev.actorId, actor->getPosition());
+			_save->getPathfinding()->setPath(parsed.path);
+			statePushBack(new UnitWalkBState(this, action));
 			break;
 		}
 		case BA_TURN:
@@ -1567,7 +1367,6 @@ void BattlescapeGame::executeReplayEvent(const Replay::ReplayEvent &ev)
 		{
 			// Blaster launcher: consecutive BA_LAUNCH events from the same actor
 			// represent waypoints of a single bomb, not separate launches.
-			// Reconstruct the waypoint list by peeking ahead.
 			action.updateTU();
 			action.replayRngSeed = ev.rngSeed;
 			action.waypoints.push_back(action.target);
@@ -1583,10 +1382,8 @@ void BattlescapeGame::executeReplayEvent(const Replay::ReplayEvent &ev)
 					const auto &nextEv = allEvts[idx + 1];
 					if (nextEv.type != "STATE_ACTION" || nextEv.actorId != ev.actorId)
 						break;
-					// Quick-parse "action: BA_LAUNCH" from the payload
 					if (nextEv.payload.find("action: BA_LAUNCH") == std::string::npos)
 						break;
-					// Parse the target position from the next event
 					auto targetPos = nextEv.payload.find("target: ");
 					if (targetPos != std::string::npos)
 					{
@@ -1596,7 +1393,6 @@ void BattlescapeGame::executeReplayEvent(const Replay::ReplayEvent &ev)
 							action.waypoints.push_back(Position(nx, ny, nz));
 						}
 					}
-					// Advance past this consumed event
 					rp->advanceEvent();
 					idx++;
 				}
@@ -1629,14 +1425,12 @@ void BattlescapeGame::executeReplayEvent(const Replay::ReplayEvent &ev)
 
 		case BA_PRIME:
 		{
-			// Apply directly — the original game already verified TUs.
-			// Deduct TUs for consistency but don't gate the action on it.
-			action.value = actionValue;
+			action.value = parsed.value;
 			action.updateTU();
 			action.spendTU(nullptr);
 			if (weapon)
 			{
-				weapon->setFuseTimer(actionValue);
+				weapon->setFuseTimer(parsed.value);
 				playSound(weapon->getRules()->getPrimeSound());
 			}
 			_save->getTileEngine()->calculateLighting(LL_UNITS, actor->getPosition());
@@ -1659,17 +1453,13 @@ void BattlescapeGame::executeReplayEvent(const Replay::ReplayEvent &ev)
 		}
 
 		default:
-			Log(LOG_WARNING) << "Replay: unhandled action type " << actionStr;
+			Log(LOG_WARNING) << "Replay: unhandled action type " << battleActionToString(parsed.actionType);
 			break;
 		}
 	}
 	else if (ev.type == "INPUT_KNEEL")
 	{
-		BattleUnit *actor = nullptr;
-		for (auto *u : *_save->getUnits())
-		{
-			if (u->getId() == ev.actorId) { actor = u; break; }
-		}
+		BattleUnit *actor = _save->findUnitById(ev.actorId);
 		if (actor)
 		{
 			getMap()->getCamera()->centerOnPosition(actor->getPosition());
@@ -1679,12 +1469,8 @@ void BattlescapeGame::executeReplayEvent(const Replay::ReplayEvent &ev)
 	else if (ev.type == "WALK_END")
 	{
 		// Correct unit position if it didn't end up where it did during recording.
-		// This handles cases where pathfinding or TU differences cause a walk to
-		// end at a different tile during replay.
-		//
-		// Skip correction for INTERMEDIATE WALK_END events: a walk can produce multiple
-		// WALK_END events (e.g., one per step if the walk pauses mid-path). Only the
-		// LAST WALK_END before the next STATE_ACTION for this actor is authoritative.
+		// Skip correction for INTERMEDIATE WALK_END events: only the LAST WALK_END
+		// before the next STATE_ACTION for this actor is authoritative.
 		bool isIntermediate = false;
 		auto *replayPlayerPtr = _save->getReplayPlayer();
 		if (replayPlayerPtr)
@@ -1711,11 +1497,7 @@ void BattlescapeGame::executeReplayEvent(const Replay::ReplayEvent &ev)
 				int ex, ey, ez;
 				if (sscanf(ev.payload.c_str() + endPosStr + 8, "%d,%d,%d", &ex, &ey, &ez) == 3)
 				{
-					BattleUnit *actor = nullptr;
-					for (auto *u : *_save->getUnits())
-					{
-						if (u->getId() == ev.actorId) { actor = u; break; }
-					}
+					BattleUnit *actor = _save->findUnitById(ev.actorId);
 					if (actor)
 					{
 						Position expected(ex, ey, ez);
@@ -1734,8 +1516,7 @@ void BattlescapeGame::executeReplayEvent(const Replay::ReplayEvent &ev)
 	}
 	else if (ev.type == "INPUT_CANCEL")
 	{
-		// No-op: cancel events are UI noise (path preview clear, exit targeting).
-		// Kept for backwards compat with old replay files.
+		// No-op: cancel events are UI noise. Kept for backwards compat.
 	}
 	else if (ev.type == "INPUT_END_TURN")
 	{
@@ -1743,7 +1524,6 @@ void BattlescapeGame::executeReplayEvent(const Replay::ReplayEvent &ev)
 	}
 	else if (ev.type == "END_TURN")
 	{
-		// Parse the side that was recorded in the event payload ("side: X turn: Y")
 		int eventSide = -1;
 		auto sidePos = ev.payload.find("side: ");
 		if (sidePos != std::string::npos)
@@ -1753,8 +1533,6 @@ void BattlescapeGame::executeReplayEvent(const Replay::ReplayEvent &ev)
 			<< " currentSide=" << _save->getSide();
 
 		// Only trigger endTurn if the game is still on the side this event ends.
-		// If the side already changed (e.g. player turn ended by INPUT_END_TURN),
-		// this END_TURN is stale and should be skipped.
 		if (eventSide >= 0 && static_cast<int>(_save->getSide()) == eventSide)
 		{
 			if (!_endTurnRequested)

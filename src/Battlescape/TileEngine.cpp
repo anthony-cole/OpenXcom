@@ -42,7 +42,6 @@
 #include "../Engine/Options.h"
 #include "ProjectileFlyBState.h"
 #include "MeleeAttackBState.h"
-#include "../Replay/Replay.h"
 #include "../fmath.h"
 
 namespace OpenXcom
@@ -3242,26 +3241,6 @@ void TileEngine::hit(BattleActionAttack attack, Position center, int power, cons
 	const int damage = type->getRandomDamage(power);
 	const int tileFinalDamage = type->getTileFinalDamage(type->getRandomDamageForTile(power, damage));
 
-	{
-		const char *mode = _save->isReplayMode() ? "Replay" : "Battle";
-		const char *partStr = "?";
-		switch (part) {
-		case V_FLOOR: partStr = "FLOOR"; break;
-		case V_WESTWALL: partStr = "WESTWALL"; break;
-		case V_NORTHWALL: partStr = "NORTHWALL"; break;
-		case V_OBJECT: partStr = "OBJECT"; break;
-		case V_UNIT: partStr = "UNIT"; break;
-		default: partStr = "OTHER"; break;
-		}
-		BattleUnit *hitBu = (part == V_UNIT) ? tile->getOverlappingUnit(_save) : nullptr;
-		Log(LOG_INFO) << mode << " hit: center=" << center.x << "," << center.y << "," << center.z
-			<< " tile=" << tilePos.x << "," << tilePos.y << "," << tilePos.z
-			<< " part=" << partStr
-			<< " power=" << power << " damage=" << damage << " tileDmg=" << tileFinalDamage
-			<< " hitUnit=" << (hitBu ? hitBu->getId() : -1)
-			<< " rng=" << RNG::getSeed();
-	}
-
 	if (part >= V_FLOOR && part <= V_OBJECT)
 	{
 		bool nothing = true;
@@ -3367,16 +3346,6 @@ void TileEngine::explode(BattleActionAttack attack, Position center, int power, 
 	std::vector<BattleItem*> toRemove;
 	std::pair<std::map<Tile*, int>::iterator, bool> ret;
 
-	if (_save->isReplayMode())
-	{
-		Log(LOG_INFO) << "Replay explode: center=" << centetTile.x << "," << centetTile.y << "," << centetTile.z
-			<< " voxel=" << center.x << "," << center.y << "," << center.z
-			<< " power=" << power << " radius=" << maxRadius
-			<< " damageType=" << type->ResistType
-			<< " attacker=" << (attack.attacker ? attack.attacker->getId() : -1)
-			<< " rngSeed=" << RNG::getSeed();
-	}
-
 	if (type->FireBlastCalc)
 	{
 		power /= 2;
@@ -3440,14 +3409,6 @@ void TileEngine::explode(BattleActionAttack attack, Position center, int power, 
 						BattleUnit *bu = dest->getOverlappingUnit(_save);
 
 						toRemove.clear();
-						if (bu && _save->isReplayMode())
-						{
-							Log(LOG_INFO) << "Replay explode hit: unit " << bu->getId()
-								<< " at " << dest->getPosition().x << "," << dest->getPosition().y << "," << dest->getPosition().z
-								<< " power_=" << power_ << " damage=" << damage
-								<< " hp=" << bu->getHealth() << " stun=" << bu->getStunlevel()
-								<< " rng=" << RNG::getSeed();
-						}
 						if (bu)
 						{
 							if (dest->getPosition() == centetTile)

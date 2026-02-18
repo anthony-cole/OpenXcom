@@ -1038,6 +1038,21 @@ BattleUnit *SavedBattleGame::selectUnit(Position pos)
 }
 
 /**
+ * Finds a unit by its unique ID.
+ * @param id The unit ID.
+ * @return Pointer to the unit, or nullptr if not found.
+ */
+BattleUnit *SavedBattleGame::findUnitById(int id) const
+{
+	for (auto *u : _units)
+	{
+		if (u->getId() == id)
+			return u;
+	}
+	return nullptr;
+}
+
+/**
  * Gets the list of nodes.
  * @return Pointer to the list of nodes.
  */

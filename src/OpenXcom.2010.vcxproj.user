@@ -20,7 +20,4 @@
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
     <LocalDebuggerCommandArguments>-data "$(ProjectDir)..\bin"</LocalDebuggerCommandArguments>
   </PropertyGroup>
-  <PropertyGroup>
-    <ShowAllFiles>true</ShowAllFiles>
-  </PropertyGroup>
 </Project>

@@ -392,6 +392,8 @@ public:
 	BattleUnit *selectNextPlayerUnitByDistance(bool checkReselect = false, bool setReselect = false, bool checkInventory = false);
 	/// Selects the unit with position on map.
 	BattleUnit *selectUnit(Position pos);
+	/// Finds a unit by its ID.
+	BattleUnit *findUnitById(int id) const;
 	/// Gets the pathfinding object.
 	Pathfinding *getPathfinding() const;
 	/// Gets a pointer to the tile engine.

@@ -2982,4 +2982,51 @@ void RuleItem::ScriptRegister(ScriptParserBase* parser)
 	ri.addDebugDisplay<&debugDisplayScript>();
 }
 
+const char* battleActionToString(BattleActionType type)
+{
+	switch (type)
+	{
+	case BA_NONE:           return "BA_NONE";
+	case BA_TURN:           return "BA_TURN";
+	case BA_WALK:           return "BA_WALK";
+	case BA_KNEEL:          return "BA_KNEEL";
+	case BA_PRIME:          return "BA_PRIME";
+	case BA_UNPRIME:        return "BA_UNPRIME";
+	case BA_THROW:          return "BA_THROW";
+	case BA_AUTOSHOT:       return "BA_AUTOSHOT";
+	case BA_SNAPSHOT:       return "BA_SNAPSHOT";
+	case BA_AIMEDSHOT:      return "BA_AIMEDSHOT";
+	case BA_HIT:            return "BA_HIT";
+	case BA_USE:            return "BA_USE";
+	case BA_LAUNCH:         return "BA_LAUNCH";
+	case BA_MINDCONTROL:    return "BA_MINDCONTROL";
+	case BA_PANIC:          return "BA_PANIC";
+	case BA_RETHINK:        return "BA_RETHINK";
+	case BA_CQB:            return "BA_CQB";
+	default:                return "BA_NONE";
+	}
+}
+
+BattleActionType battleActionFromString(const std::string &s)
+{
+	if (s == "BA_TURN")         return BA_TURN;
+	if (s == "BA_WALK")         return BA_WALK;
+	if (s == "BA_KNEEL")        return BA_KNEEL;
+	if (s == "BA_PRIME")        return BA_PRIME;
+	if (s == "BA_UNPRIME")      return BA_UNPRIME;
+	if (s == "BA_THROW")        return BA_THROW;
+	if (s == "BA_AUTOSHOT")     return BA_AUTOSHOT;
+	if (s == "BA_SNAPSHOT")     return BA_SNAPSHOT;
+	if (s == "BA_AIMEDSHOT")    return BA_AIMEDSHOT;
+	if (s == "BA_HIT")          return BA_HIT;
+	if (s == "BA_USE")          return BA_USE;
+	if (s == "BA_LAUNCH")       return BA_LAUNCH;
+	if (s == "BA_MINDCONTROL")  return BA_MINDCONTROL;
+	if (s == "BA_PANIC")        return BA_PANIC;
+	if (s == "BA_RETHINK")      return BA_RETHINK;
+	if (s == "BA_CQB")          return BA_CQB;
+	try { return static_cast<BattleActionType>(std::stoi(s)); }
+	catch (...) { return BA_NONE; }
+}
+
 }

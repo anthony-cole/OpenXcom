@@ -1,10 +1,12 @@
 #include "Replay.h"
 #include "../Savegame/SavedBattleGame.h"
+#include "../Battlescape/Pathfinding.h"
 #include "../Engine/Yaml.h"
 #include "../Engine/Logger.h"
 #include "../Engine/RNG.h"
 #include <fstream>
 #include <sstream>
+#include <cstdio>
 
 namespace OpenXcom
 {
@@ -50,51 +52,6 @@ void ReplayRecorder::recordEvent(const ReplayEvent &ev)
     _events.push_back(ev);
 }
 
-void ReplayRecorder::updateLastProjectileRngSeed(uint64_t seed)
-{
-    // Walk backwards to find the most recent STATE_ACTION event and update its seed.
-    // This captures the RNG state at ProjectileFlyBState::init() time, which is more
-    // precise than the seed captured at event recording time.
-    for (auto it = _events.rbegin(); it != _events.rend(); ++it)
-    {
-        if (it->type == "STATE_ACTION")
-        {
-            it->rngSeed = seed;
-            return;
-        }
-    }
-}
-
-void ReplayRecorder::updateLastExplosionSeed(uint64_t seed)
-{
-    // Walk backwards to find the most recent STATE_ACTION event and set its explosion seed.
-    // Called from TileEngine::explode() during recording to capture the RNG state
-    // right before explosion damage calculations.
-    for (auto it = _events.rbegin(); it != _events.rend(); ++it)
-    {
-        if (it->type == "STATE_ACTION")
-        {
-            it->explosionSeed = seed;
-            return;
-        }
-    }
-}
-
-void ReplayRecorder::updateLastHitSeed(uint64_t seed)
-{
-    // Walk backwards to find the most recent STATE_ACTION event and set its hit seed.
-    // Called from TileEngine::hit() during recording to capture the RNG state
-    // right before direct damage calculations.
-    for (auto it = _events.rbegin(); it != _events.rend(); ++it)
-    {
-        if (it->type == "STATE_ACTION")
-        {
-            it->hitSeed = seed;
-            return;
-        }
-    }
-}
-
 void ReplayRecorder::updateLastDamageSeed(uint64_t seed)
 {
     // Walk backwards to find the most recent STATE_ACTION event and set its explosionSeed
@@ -108,6 +65,106 @@ void ReplayRecorder::updateLastDamageSeed(uint64_t seed)
                 it->explosionSeed = seed;
             return;
         }
+    }
+}
+
+ParsedStateAction parseStateActionPayload(const std::string &payload)
+{
+    ParsedStateAction p;
+    std::istringstream ss(payload);
+    std::string token;
+    while (ss >> token)
+    {
+        if (token == "action:")
+        {
+            std::string actionStr;
+            ss >> actionStr;
+            p.actionType = battleActionFromString(actionStr);
+        }
+        else if (token == "target:")
+        {
+            char comma;
+            ss >> p.target.x >> comma >> p.target.y >> comma >> p.target.z;
+        }
+        else if (token == "weapon:")
+            ss >> p.weaponType;
+        else if (token == "value:")
+            ss >> p.value;
+        else if (token == "reactionFire:")
+        {
+            std::string val;
+            ss >> val;
+            p.reactionFire = (val == "true");
+        }
+        else if (token == "path:")
+        {
+            std::string pathStr;
+            ss >> pathStr;
+            std::istringstream ps(pathStr);
+            int dir;
+            while (ps >> dir)
+            {
+                p.path.push_back(dir);
+                char c;
+                if (!(ps >> c)) break;
+            }
+        }
+    }
+    return p;
+}
+
+void trimWalkPathFromReplay(std::vector<int> &path, const ReplayPlayer *player,
+                            int actorId, const Position &actorPos)
+{
+    if (!player || path.empty()) return;
+
+    const auto &allEvents = player->getEvents();
+    size_t curIdx = player->getCurrentIndex();
+
+    // Scan ahead to find the LAST WALK_END for this actor before its next STATE_ACTION.
+    Position walkEndPos;
+    bool foundWalkEnd = false;
+    for (size_t i = curIdx + 1; i < allEvents.size(); ++i)
+    {
+        if (allEvents[i].type == "STATE_ACTION" && allEvents[i].actorId == actorId)
+            break;
+        if (allEvents[i].type == "WALK_END" && allEvents[i].actorId == actorId)
+        {
+            auto endPosStr = allEvents[i].payload.find("endPos: ");
+            if (endPosStr != std::string::npos)
+            {
+                int ex, ey, ez;
+                if (sscanf(allEvents[i].payload.c_str() + endPosStr + 8, "%d,%d,%d", &ex, &ey, &ez) == 3)
+                {
+                    walkEndPos = Position(ex, ey, ez);
+                    foundWalkEnd = true;
+                }
+            }
+        }
+    }
+
+    if (!foundWalkEnd) return;
+
+    // Simulate the recorded path (LIFO: last element = first step) and trim
+    // to the step that reaches walkEndPos.
+    Position pos = actorPos;
+    size_t stepsNeeded = 0;
+    bool found = false;
+    for (int pi = path.size() - 1; pi >= 0; --pi)
+    {
+        Position delta;
+        Pathfinding::directionToVector(path[pi], &delta);
+        pos += delta;
+        stepsNeeded++;
+        if (pos.x == walkEndPos.x && pos.y == walkEndPos.y)
+        {
+            found = true;
+            break;
+        }
+    }
+    if (found && stepsNeeded < path.size())
+    {
+        path.erase(path.begin(), path.begin() + (path.size() - stepsNeeded));
     }
 }
 
