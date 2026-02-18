@@ -109,15 +109,8 @@ void ProjectileFlyBState::init()
 		_ammo = _action.weapon->getAmmoForAction(_action.type, reactionShoot ? nullptr : &_action.result);
 		if (!_ammo)
 		{
-			if (_parent->getSave()->isReplayMode())
-			{
-				_ammo = _action.weapon;
-			}
-			else
-			{
-				_parent->popState();
-				return;
-			}
+			_parent->popState();
+			return;
 		}
 	}
 
@@ -132,25 +125,11 @@ void ProjectileFlyBState::init()
 	if (reactionShoot)
 	{
 		BattleUnit* target = _parent->getSave()->getTile(_action.target)->getUnit();
-		// In replay mode, skip the target validation — we know the shot happened.
-		// The selectedUnit/target-on-tile checks can fail due to event ordering.
-		if (!_parent->getSave()->isReplayMode())
+		// target is dead: cancel the shot.
+		if (!target || target->isOut() || target->isOutThresholdExceed() || target != _parent->getSave()->getSelectedUnit())
 		{
-			// target is dead: cancel the shot.
-			if (!target || target->isOut() || target->isOutThresholdExceed() || target != _parent->getSave()->getSelectedUnit())
-			{
-				_parent->popState();
-				return;
-			}
-		}
-		else
-		{
-			// In replay mode, still skip if target is dead/out
-			if (target && (target->isOut() || target->isOutThresholdExceed()))
-			{
-				_parent->popState();
-				return;
-			}
+			_parent->popState();
+			return;
 		}
 		_unit->lookAt(_action.target, _unit->getTurretType() != -1);
 		while (_unit->getStatus() == STATUS_TURNING)
@@ -381,30 +360,10 @@ void ProjectileFlyBState::init()
 				{
 					// Failed to find LOF
 					_action.relativeOrigin = BattleActionOrigin::CENTRE; // reset to the normal origin
-
-					if (_parent->getSave()->isReplayMode())
+					_targetVoxel = TileEngine::invalid.toVoxel(); // out of bounds, even after voxel to tile calculation.
+					if (isPlayer)
 					{
-						// During replay, bypass LOF failure — compute target from unit body center.
-						// The original game found LOF (the shot was recorded), but terrain/state divergence
-						// can block it in replay. Using body center lets the shot proceed.
-						BattleUnit *targetUnit = targetTile->getUnit();
-						if (targetUnit)
-						{
-							_targetVoxel = targetUnit->getPosition().toVoxel()
-								+ Position(8, 8, targetUnit->getFloatHeight() + targetUnit->getHeight() / 2 + 1);
-						}
-						else
-						{
-							_targetVoxel = TileEngine::invalid.toVoxel();
-						}
-					}
-					else
-					{
-						_targetVoxel = TileEngine::invalid.toVoxel(); // out of bounds, even after voxel to tile calculation.
-						if (isPlayer)
-						{
-							forceEnableObstacles = true;
-						}
+						forceEnableObstacles = true;
 					}
 				}
 			}
