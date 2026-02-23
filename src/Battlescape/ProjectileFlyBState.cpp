@@ -327,7 +327,6 @@ void ProjectileFlyBState::init()
 		// Store this target voxel.
 		Tile *targetTile = _parent->getSave()->getTile(_action.target);
 		Position originVoxel = _parent->getTileEngine()->getOriginVoxel(_action, _parent->getSave()->getTile(_origin));
-
 		if (targetTile->getUnit() &&
 			((_unit->getFaction() != FACTION_PLAYER) ||
 			targetTile->getUnit()->getVisible()))
@@ -360,6 +359,7 @@ void ProjectileFlyBState::init()
 				{
 					// Failed to find LOF
 					_action.relativeOrigin = BattleActionOrigin::CENTRE; // reset to the normal origin
+
 					_targetVoxel = TileEngine::invalid.toVoxel(); // out of bounds, even after voxel to tile calculation.
 					if (isPlayer)
 					{
@@ -367,7 +367,6 @@ void ProjectileFlyBState::init()
 					}
 				}
 			}
-
 		}
 		else if (targetTile->getMapData(O_OBJECT) != 0)
 		{
@@ -554,16 +553,14 @@ bool ProjectileFlyBState::createNewProjectile()
 	}
 	else
 	{
-		double accuracy = BattleUnit::getFiringAccuracy(attack, _parent->getMod()) / accuracyDivider;
 		if (_originVoxel != TileEngine::invalid)
 		{
-			_projectileImpact = projectile->calculateTrajectory(accuracy, _originVoxel, false);
+			_projectileImpact = projectile->calculateTrajectory(BattleUnit::getFiringAccuracy(attack, _parent->getMod()) / accuracyDivider, _originVoxel, false);
 		}
 		else
 		{
-			_projectileImpact = projectile->calculateTrajectory(accuracy);
+			_projectileImpact = projectile->calculateTrajectory(BattleUnit::getFiringAccuracy(attack, _parent->getMod()) / accuracyDivider);
 		}
-
 		if (_targetVoxel != TileEngine::invalid.toVoxel() && (_projectileImpact != V_EMPTY || _action.type == BA_LAUNCH))
 		{
 			// set the soldier in an aiming position
