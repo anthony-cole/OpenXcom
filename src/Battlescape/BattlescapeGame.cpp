@@ -1194,415 +1194,6 @@ void BattlescapeGame::handleState()
 }
 
 /**
- * Finds a weapon on a unit by its rule type name.
- * Searches inventory first, then special weapons (psi amps, built-in weapons).
- * @param actor The unit to search.
- * @param weaponType The rule type name to match.
- * @return Pointer to the weapon, or nullptr if not found.
- */
-BattleItem *BattlescapeGame::findWeaponByType(BattleUnit *actor, const std::string &weaponType) const
-{
-	for (auto *item : *actor->getInventory())
-	{
-		if (item->getRules()->getType() == weaponType)
-			return item;
-	}
-	for (int bt = BT_FIREARM; bt <= BT_CORPSE; ++bt)
-	{
-		BattleItem *sw = actor->getSpecialWeapon(static_cast<BattleType>(bt));
-		if (sw && sw->getRules()->getType() == weaponType)
-			return sw;
-	}
-	return nullptr;
-}
-
-/**
- * Records a simple action (walk, turn, kneel, prime, unprime) for replay.
- * These actions never fail validation, so recording at dispatch time is safe.
- * Complex actions (shots, melee, psi) record in their BState::init() after TU validation.
- */
-void BattlescapeGame::recordAction(const BattleAction &action)
-{
-	if (_save->getReplayPlayer()) return;
-
-	if (!action.actor || action.type == BA_NONE) return;
-
-	std::ostringstream payload;
-	payload << "action: " << battleActionToString(action.type);
-	if (action.target != Position(-1, -1, -1))
-		payload << " target: " << action.target.x << "," << action.target.y << "," << action.target.z;
-	if (action.weapon && action.type != BA_WALK && action.type != BA_KNEEL && action.type != BA_TURN)
-		payload << " weapon: " << action.weapon->getRules()->getType();
-	// Tag reaction fire so it can be skipped during replay (it happens naturally from walks)
-	if (action.actor->getFaction() != _save->getSide())
-		payload << " reactionFire: true";
-	// Record the full path for walks so replay doesn't depend on pathfinding
-	if (action.type == BA_WALK)
-	{
-		const auto &path = _save->getPathfinding()->getPath();
-		if (!path.empty())
-		{
-			payload << " path:";
-			for (size_t i = 0; i < path.size(); ++i)
-			{
-				payload << (i == 0 ? " " : ",") << path[i];
-			}
-		}
-	}
-	// Record prime value
-	if (action.type == BA_PRIME)
-		payload << " value: " << action.value;
-
-	recordBattleEvent("STATE_ACTION", action.actor, payload.str());
-}
-
-/**
- * Central action-to-BState dispatcher.
- * Maps BattleAction.type to the appropriate BState push(es).
- * Used by both player input and replay playback.
- */
-void BattlescapeGame::dispatchAction(BattleAction &action)
-{
-	// Record simple actions that never fail validation
-	// BA_KNEEL records in kneel() itself; BA_PRIME/BA_UNPRIME record in handleNonTargetAction() after TU validation
-	bool isSimple = (action.type == BA_WALK || action.type == BA_TURN);
-	if (!_save->isReplayMode() && isSimple)
-		recordAction(action);
-
-	switch (action.type)
-	{
-	case BA_WALK:
-		statePushBack(new UnitWalkBState(this, action));
-		break;
-	case BA_TURN:
-		statePushBack(new UnitTurnBState(this, action, false));
-		break;
-
-	case BA_SNAPSHOT:
-	case BA_AIMEDSHOT:
-	case BA_AUTOSHOT:
-	case BA_THROW:
-		action.updateTU();
-		_states.push_back(new ProjectileFlyBState(this, action));
-		statePushFront(new UnitTurnBState(this, action, false));
-		break;
-
-	case BA_LAUNCH:
-		action.updateTU();
-		_states.push_back(new ProjectileFlyBState(this, action));
-		statePushFront(new UnitTurnBState(this, action, false));
-		break;
-
-	case BA_HIT:
-	case BA_CQB:
-		action.updateTU();
-		statePushBack(new UnitTurnBState(this, action, false));
-		statePushBack(new MeleeAttackBState(this, action));
-		break;
-
-	case BA_MINDCONTROL:
-	case BA_PANIC:
-	case BA_USE:
-		action.updateTU();
-		action.targeting = true;
-		statePushBack(new PsiAttackBState(this, action));
-		break;
-
-	case BA_PRIME:
-	{
-		action.updateTU();
-		action.spendTU(nullptr);
-		if (action.weapon)
-		{
-			action.weapon->setFuseTimer(action.value);
-			playSound(action.weapon->getRules()->getPrimeSound());
-		}
-		_save->getTileEngine()->calculateLighting(LL_UNITS, action.actor->getPosition());
-		_save->getTileEngine()->calculateFOV(action.actor->getPosition(), action.weapon ? action.weapon->getVisibilityUpdateRange() : 0, false);
-		break;
-	}
-	case BA_UNPRIME:
-	{
-		action.updateTU();
-		action.spendTU(nullptr);
-		if (action.weapon)
-		{
-			action.weapon->setFuseTimer(-1);
-			playSound(action.weapon->getRules()->getUnprimeSound());
-		}
-		_save->getTileEngine()->calculateLighting(LL_UNITS, action.actor->getPosition());
-		_save->getTileEngine()->calculateFOV(action.actor->getPosition(), action.weapon ? action.weapon->getVisibilityUpdateRange() : 0, false);
-		break;
-	}
-
-	case BA_KNEEL:
-		kneel(action.actor);
-		break;
-
-	case BA_NONE:
-		break;
-	default:
-		Log(LOG_WARNING) << "dispatchAction: unhandled action type " << battleActionToString(action.type);
-		break;
-	}
-}
-
-/**
- * Converts a ReplayEvent into a fully-formed BattleAction.
- */
-BattleAction BattlescapeGame::buildActionFromEvent(const Replay::ReplayEvent &ev)
-{
-	Replay::ParsedStateAction parsed = Replay::parseStateActionPayload(ev.payload);
-
-	BattleUnit *actor = _save->findUnitById(ev.actorId);
-
-	// Find weapon (skip for actions that don't use weapons)
-	BattleItem *weapon = nullptr;
-	if (!parsed.weaponType.empty() && parsed.actionType != BA_WALK && parsed.actionType != BA_KNEEL && parsed.actionType != BA_TURN)
-	{
-		weapon = findWeaponByType(actor, parsed.weaponType);
-		if (!weapon)
-		{
-			Log(LOG_WARNING) << "Replay: could not find weapon '" << parsed.weaponType
-				<< "' for unit " << ev.actorId;
-		}
-	}
-
-	BattleAction action;
-	action.type = parsed.actionType;
-	action.actor = actor;
-	action.weapon = weapon;
-	action.target = parsed.target;
-	action.cameraPosition = getMap()->getCamera()->getMapOffset();
-	action.replayRngSeed = ev.rngSeed;
-	action.value = parsed.value;
-
-	// Walk-specific setup
-	if (action.type == BA_WALK)
-	{
-		action.ignoreSpottedEnemies = true;
-		Replay::trimWalkPathFromReplay(parsed.path, _save->getReplayPlayer(),
-			ev.actorId, actor->getPosition());
-		_save->getPathfinding()->setPath(parsed.path);
-	}
-
-	// Blaster launcher waypoints: consume consecutive BA_LAUNCH events from same actor
-	if (action.type == BA_LAUNCH)
-	{
-		action.waypoints.push_back(action.target);
-		auto *rp = _save->getReplayPlayer();
-		if (rp)
-		{
-			const auto &allEvts = rp->getEvents();
-			size_t idx = rp->getCurrentIndex();
-			while (idx + 1 < allEvts.size())
-			{
-				const auto &nextEv = allEvts[idx + 1];
-				if (nextEv.type != "STATE_ACTION" || nextEv.actorId != ev.actorId)
-					break;
-				if (nextEv.payload.find("action: LAUNCH") == std::string::npos)
-					break;
-				auto targetPos = nextEv.payload.find("target: ");
-				if (targetPos != std::string::npos)
-				{
-					int nx, ny, nz;
-					if (sscanf(nextEv.payload.c_str() + targetPos + 8, "%d,%d,%d", &nx, &ny, &nz) == 3)
-					{
-						action.waypoints.push_back(Position(nx, ny, nz));
-					}
-				}
-				rp->advanceEvent();
-				idx++;
-			}
-		}
-	}
-
-	return action;
-}
-
-/**
- * Executes a single replay event by parsing its type and payload,
- * then dispatching to the appropriate BattleState or action.
- */
-void BattlescapeGame::executeReplayEvent(const Replay::ReplayEvent &ev)
-{
-	// Restore RNG seed to match the original recording state
-	if (ev.rngSeed != 0)
-	{
-		RNG::setSeed(ev.rngSeed);
-	}
-
-	// Store unified damage RNG seed for replay (covers both hit and explode).
-	// New recordings use explosionSeed as the unified field; older files may have hitSeed.
-	{
-		uint64_t damageSeed = ev.explosionSeed ? ev.explosionSeed : ev.hitSeed;
-		if (damageSeed != 0)
-		{
-			_save->setReplayDamageSeed(damageSeed);
-		}
-	}
-
-	if (ev.type == "STATE_ACTION")
-	{
-		BattleAction action = buildActionFromEvent(ev);
-		if (!action.actor)
-		{
-			Log(LOG_WARNING) << "Replay: could not find unit " << ev.actorId << " for STATE_ACTION";
-			return;
-		}
-		if (!action.weapon && action.type != BA_WALK && action.type != BA_KNEEL && action.type != BA_TURN)
-		{
-			Replay::ParsedStateAction parsed = Replay::parseStateActionPayload(ev.payload);
-			if (!parsed.weaponType.empty())
-			{
-				Log(LOG_WARNING) << "Replay: could not find weapon '" << parsed.weaponType
-					<< "' for unit " << ev.actorId << ", skipping action";
-				return;
-			}
-		}
-		if (action.actor->isOut())
-		{
-			Log(LOG_WARNING) << "Replay: skipping action for unit " << ev.actorId
-				<< " (unit is out of action: dead=" << action.actor->getStatus() << ")";
-			return;
-		}
-
-		// Camera and unit selection setup
-		Replay::ParsedStateAction parsed = Replay::parseStateActionPayload(ev.payload);
-		if (parsed.reactionFire)
-		{
-			getMap()->getCamera()->centerOnPosition(parsed.target);
-			Tile *targetTile = _save->getTile(parsed.target);
-			BattleUnit *targetUnit = targetTile ? targetTile->getUnit() : nullptr;
-			if (targetUnit)
-			{
-				_save->setSelectedUnit(targetUnit);
-			}
-			else
-			{
-				Log(LOG_WARNING) << "Replay: reaction fire target tile " << parsed.target.x << "," << parsed.target.y << "," << parsed.target.z
-					<< " has no unit (shooter=" << ev.actorId << ")";
-			}
-		}
-		else
-		{
-			getMap()->getCamera()->centerOnPosition(action.actor->getPosition());
-			_save->setSelectedUnit(action.actor);
-		}
-		_parentState->updateSoldierInfo();
-
-		if (action.type == BA_WALK)
-		{
-			Log(LOG_INFO) << "Replay: unit " << ev.actorId << " walk from "
-				<< action.actor->getPosition().x << "," << action.actor->getPosition().y << "," << action.actor->getPosition().z
-				<< " to " << action.target.x << "," << action.target.y << "," << action.target.z;
-		}
-		else if (action.type == BA_LAUNCH && !action.waypoints.empty())
-		{
-			Log(LOG_INFO) << "Replay: unit " << ev.actorId << " BA_LAUNCH with "
-				<< action.waypoints.size() << " waypoints, final target "
-				<< action.waypoints.back().x << "," << action.waypoints.back().y << "," << action.waypoints.back().z;
-		}
-
-		dispatchAction(action);
-	}
-	else if (ev.type == "INPUT_KNEEL")
-	{
-		BattleUnit *actor = _save->findUnitById(ev.actorId);
-		if (actor)
-		{
-			getMap()->getCamera()->centerOnPosition(actor->getPosition());
-			kneel(actor);
-		}
-	}
-	else if (ev.type == "WALK_END")
-	{
-		// Correct unit position if it didn't end up where it did during recording.
-		// Skip correction for INTERMEDIATE WALK_END events: only the LAST WALK_END
-		// before the next STATE_ACTION for this actor is authoritative.
-		bool isIntermediate = false;
-		auto *replayPlayerPtr = _save->getReplayPlayer();
-		if (replayPlayerPtr)
-		{
-			const auto &allEvents = replayPlayerPtr->getEvents();
-			size_t curIdx = replayPlayerPtr->getCurrentIndex();
-			for (size_t i = curIdx + 1; i < allEvents.size(); ++i)
-			{
-				if (allEvents[i].type == "STATE_ACTION" && allEvents[i].actorId == ev.actorId)
-					break;
-				if (allEvents[i].type == "WALK_END" && allEvents[i].actorId == ev.actorId)
-				{
-					isIntermediate = true;
-					break;
-				}
-			}
-		}
-
-		if (!isIntermediate)
-		{
-			auto endPosStr = ev.payload.find("endPos: ");
-			if (endPosStr != std::string::npos)
-			{
-				int ex, ey, ez;
-				if (sscanf(ev.payload.c_str() + endPosStr + 8, "%d,%d,%d", &ex, &ey, &ez) == 3)
-				{
-					BattleUnit *actor = _save->findUnitById(ev.actorId);
-					if (actor)
-					{
-						Position expected(ex, ey, ez);
-						if (actor->getPosition() != expected)
-						{
-							Log(LOG_INFO) << "Replay: correcting unit " << ev.actorId << " position from "
-								<< actor->getPosition().x << "," << actor->getPosition().y << "," << actor->getPosition().z
-								<< " to " << ex << "," << ey << "," << ez;
-							actor->setPosition(expected);
-							actor->setTile(_save->getTile(expected), _save);
-						}
-					}
-				}
-			}
-		}
-	}
-	else if (ev.type == "INPUT_CANCEL")
-	{
-		// No-op: cancel events are UI noise. Kept for backwards compat.
-	}
-	else if (ev.type == "INPUT_END_TURN")
-	{
-		requestEndTurn(false);
-	}
-	else if (ev.type == "END_TURN")
-	{
-		int eventSide = -1;
-		auto sidePos = ev.payload.find("side: ");
-		if (sidePos != std::string::npos)
-			eventSide = std::stoi(ev.payload.substr(sidePos + 6));
-
-		Log(LOG_INFO) << "Replay: END_TURN event, eventSide=" << eventSide
-			<< " currentSide=" << _save->getSide();
-
-		// Only trigger endTurn if the game is still on the side this event ends.
-		if (eventSide >= 0 && static_cast<int>(_save->getSide()) == eventSide)
-		{
-			if (!_endTurnRequested)
-			{
-				Log(LOG_INFO) << "Replay: triggering endTurn for side " << eventSide;
-				_endTurnRequested = true;
-				statePushBack(0);
-			}
-		}
-		else
-		{
-			Log(LOG_INFO) << "Replay: END_TURN skipped (side already changed)";
-		}
-	}
-	else
-	{
-		Log(LOG_DEBUG) << "Replay: ignoring event type '" << ev.type << "'";
-	}
-}
-
-/**
  * Pushes a state to the front of the queue and starts it.
  * @param bs Battlestate.
  */
@@ -3891,6 +3482,415 @@ Replay::ReplayRecorder *BattlescapeGame::getRecorder()
 uint64_t BattlescapeGame::getNextReplayTick()
 {
 	return _save->getNextReplayTick();
+}
+
+/**
+ * Records an action for replay.
+ * Simple actions (walk, turn) are recorded at dispatch time since they never fail.
+ * Complex actions (shots, melee, psi) call this from their BState::init() after TU validation.
+ */
+void BattlescapeGame::recordAction(const BattleAction &action)
+{
+	if (_save->getReplayPlayer()) return;
+
+	if (!action.actor || action.type == BA_NONE) return;
+
+	std::ostringstream payload;
+	payload << "action: " << battleActionToString(action.type);
+	if (action.target != Position(-1, -1, -1))
+		payload << " target: " << action.target.x << "," << action.target.y << "," << action.target.z;
+	if (action.weapon && action.type != BA_WALK && action.type != BA_KNEEL && action.type != BA_TURN)
+		payload << " weapon: " << action.weapon->getRules()->getType();
+	// Tag reaction fire so it can be skipped during replay (it happens naturally from walks)
+	if (action.actor->getFaction() != _save->getSide())
+		payload << " reactionFire: true";
+	// Record the full path for walks so replay doesn't depend on pathfinding
+	if (action.type == BA_WALK)
+	{
+		const auto &path = _save->getPathfinding()->getPath();
+		if (!path.empty())
+		{
+			payload << " path:";
+			for (size_t i = 0; i < path.size(); ++i)
+			{
+				payload << (i == 0 ? " " : ",") << path[i];
+			}
+		}
+	}
+	// Record prime value
+	if (action.type == BA_PRIME)
+		payload << " value: " << action.value;
+
+	recordBattleEvent("STATE_ACTION", action.actor, payload.str());
+}
+
+/**
+ * Central action-to-BState dispatcher.
+ * Maps BattleAction.type to the appropriate BState push(es).
+ * Used by both player input, AI, and replay playback.
+ */
+void BattlescapeGame::dispatchAction(BattleAction &action)
+{
+	// Record simple actions that never fail validation
+	// BA_KNEEL records in kneel() itself; BA_PRIME/BA_UNPRIME record in handleNonTargetAction() after TU validation
+	bool isSimple = (action.type == BA_WALK || action.type == BA_TURN);
+	if (!_save->isReplayMode() && isSimple)
+		recordAction(action);
+
+	switch (action.type)
+	{
+	case BA_WALK:
+		statePushBack(new UnitWalkBState(this, action));
+		break;
+	case BA_TURN:
+		statePushBack(new UnitTurnBState(this, action, false));
+		break;
+
+	case BA_SNAPSHOT:
+	case BA_AIMEDSHOT:
+	case BA_AUTOSHOT:
+	case BA_THROW:
+		action.updateTU();
+		_states.push_back(new ProjectileFlyBState(this, action));
+		statePushFront(new UnitTurnBState(this, action, false));
+		break;
+
+	case BA_LAUNCH:
+		action.updateTU();
+		_states.push_back(new ProjectileFlyBState(this, action));
+		statePushFront(new UnitTurnBState(this, action, false));
+		break;
+
+	case BA_HIT:
+	case BA_CQB:
+		action.updateTU();
+		statePushBack(new UnitTurnBState(this, action, false));
+		statePushBack(new MeleeAttackBState(this, action));
+		break;
+
+	case BA_MINDCONTROL:
+	case BA_PANIC:
+	case BA_USE:
+		action.updateTU();
+		action.targeting = true;
+		statePushBack(new PsiAttackBState(this, action));
+		break;
+
+	case BA_PRIME:
+	{
+		action.updateTU();
+		action.spendTU(nullptr);
+		if (action.weapon)
+		{
+			action.weapon->setFuseTimer(action.value);
+			playSound(action.weapon->getRules()->getPrimeSound());
+		}
+		_save->getTileEngine()->calculateLighting(LL_UNITS, action.actor->getPosition());
+		_save->getTileEngine()->calculateFOV(action.actor->getPosition(), action.weapon ? action.weapon->getVisibilityUpdateRange() : 0, false);
+		break;
+	}
+	case BA_UNPRIME:
+	{
+		action.updateTU();
+		action.spendTU(nullptr);
+		if (action.weapon)
+		{
+			action.weapon->setFuseTimer(-1);
+			playSound(action.weapon->getRules()->getUnprimeSound());
+		}
+		_save->getTileEngine()->calculateLighting(LL_UNITS, action.actor->getPosition());
+		_save->getTileEngine()->calculateFOV(action.actor->getPosition(), action.weapon ? action.weapon->getVisibilityUpdateRange() : 0, false);
+		break;
+	}
+
+	case BA_KNEEL:
+		kneel(action.actor);
+		break;
+
+	case BA_NONE:
+		break;
+	default:
+		Log(LOG_WARNING) << "dispatchAction: unhandled action type " << battleActionToString(action.type);
+		break;
+	}
+}
+
+/**
+ * Converts a ReplayEvent into a fully-formed BattleAction.
+ */
+BattleAction BattlescapeGame::buildActionFromEvent(const Replay::ReplayEvent &ev)
+{
+	Replay::ParsedStateAction parsed = Replay::parseStateActionPayload(ev.payload);
+
+	BattleUnit *actor = _save->findUnitById(ev.actorId);
+
+	// Find weapon (skip for actions that don't use weapons)
+	BattleItem *weapon = nullptr;
+	if (!parsed.weaponType.empty() && parsed.actionType != BA_WALK && parsed.actionType != BA_KNEEL && parsed.actionType != BA_TURN)
+	{
+		weapon = findWeaponByType(actor, parsed.weaponType);
+		if (!weapon)
+		{
+			Log(LOG_WARNING) << "Replay: could not find weapon '" << parsed.weaponType
+				<< "' for unit " << ev.actorId;
+		}
+	}
+
+	BattleAction action;
+	action.type = parsed.actionType;
+	action.actor = actor;
+	action.weapon = weapon;
+	action.target = parsed.target;
+	action.cameraPosition = getMap()->getCamera()->getMapOffset();
+	action.replayRngSeed = ev.rngSeed;
+	action.value = parsed.value;
+
+	// Walk-specific setup
+	if (action.type == BA_WALK)
+	{
+		action.ignoreSpottedEnemies = true;
+		Replay::trimWalkPathFromReplay(parsed.path, _save->getReplayPlayer(),
+			ev.actorId, actor->getPosition());
+		_save->getPathfinding()->setPath(parsed.path);
+	}
+
+	// Blaster launcher waypoints: consume consecutive BA_LAUNCH events from same actor
+	if (action.type == BA_LAUNCH)
+	{
+		action.waypoints.push_back(action.target);
+		auto *rp = _save->getReplayPlayer();
+		if (rp)
+		{
+			const auto &allEvts = rp->getEvents();
+			size_t idx = rp->getCurrentIndex();
+			while (idx + 1 < allEvts.size())
+			{
+				const auto &nextEv = allEvts[idx + 1];
+				if (nextEv.type != "STATE_ACTION" || nextEv.actorId != ev.actorId)
+					break;
+				if (nextEv.payload.find("action: LAUNCH") == std::string::npos)
+					break;
+				auto targetPos = nextEv.payload.find("target: ");
+				if (targetPos != std::string::npos)
+				{
+					int nx, ny, nz;
+					if (sscanf(nextEv.payload.c_str() + targetPos + 8, "%d,%d,%d", &nx, &ny, &nz) == 3)
+					{
+						action.waypoints.push_back(Position(nx, ny, nz));
+					}
+				}
+				rp->advanceEvent();
+				idx++;
+			}
+		}
+	}
+
+	return action;
+}
+
+/**
+ * Finds a weapon on a unit by its rule type name.
+ * Searches inventory first, then special weapons (psi amps, built-in weapons).
+ * @param actor The unit to search.
+ * @param weaponType The rule type name to match.
+ * @return Pointer to the weapon, or nullptr if not found.
+ */
+BattleItem *BattlescapeGame::findWeaponByType(BattleUnit *actor, const std::string &weaponType) const
+{
+	for (auto *item : *actor->getInventory())
+	{
+		if (item->getRules()->getType() == weaponType)
+			return item;
+	}
+	for (int bt = BT_FIREARM; bt <= BT_CORPSE; ++bt)
+	{
+		BattleItem *sw = actor->getSpecialWeapon(static_cast<BattleType>(bt));
+		if (sw && sw->getRules()->getType() == weaponType)
+			return sw;
+	}
+	return nullptr;
+}
+
+/**
+ * Executes a single replay event by parsing its type and payload,
+ * then dispatching to the appropriate BattleState or action.
+ */
+void BattlescapeGame::executeReplayEvent(const Replay::ReplayEvent &ev)
+{
+	// Restore RNG seed to match the original recording state
+	if (ev.rngSeed != 0)
+	{
+		RNG::setSeed(ev.rngSeed);
+	}
+
+	// Store unified damage RNG seed for replay (covers both hit and explode).
+	// New recordings use explosionSeed as the unified field; older files may have hitSeed.
+	{
+		uint64_t damageSeed = ev.explosionSeed ? ev.explosionSeed : ev.hitSeed;
+		if (damageSeed != 0)
+		{
+			_save->setReplayDamageSeed(damageSeed);
+		}
+	}
+
+	if (ev.type == "STATE_ACTION")
+	{
+		BattleAction action = buildActionFromEvent(ev);
+		if (!action.actor)
+		{
+			Log(LOG_WARNING) << "Replay: could not find unit " << ev.actorId << " for STATE_ACTION";
+			return;
+		}
+		if (!action.weapon && action.type != BA_WALK && action.type != BA_KNEEL && action.type != BA_TURN)
+		{
+			Replay::ParsedStateAction parsed = Replay::parseStateActionPayload(ev.payload);
+			if (!parsed.weaponType.empty())
+			{
+				Log(LOG_WARNING) << "Replay: could not find weapon '" << parsed.weaponType
+					<< "' for unit " << ev.actorId << ", skipping action";
+				return;
+			}
+		}
+		if (action.actor->isOut())
+		{
+			Log(LOG_WARNING) << "Replay: skipping action for unit " << ev.actorId
+				<< " (unit is out of action: dead=" << action.actor->getStatus() << ")";
+			return;
+		}
+
+		// Camera and unit selection setup
+		Replay::ParsedStateAction parsed = Replay::parseStateActionPayload(ev.payload);
+		if (parsed.reactionFire)
+		{
+			getMap()->getCamera()->centerOnPosition(parsed.target);
+			Tile *targetTile = _save->getTile(parsed.target);
+			BattleUnit *targetUnit = targetTile ? targetTile->getUnit() : nullptr;
+			if (targetUnit)
+			{
+				_save->setSelectedUnit(targetUnit);
+			}
+			else
+			{
+				Log(LOG_WARNING) << "Replay: reaction fire target tile " << parsed.target.x << "," << parsed.target.y << "," << parsed.target.z
+					<< " has no unit (shooter=" << ev.actorId << ")";
+			}
+		}
+		else
+		{
+			getMap()->getCamera()->centerOnPosition(action.actor->getPosition());
+			_save->setSelectedUnit(action.actor);
+		}
+		_parentState->updateSoldierInfo();
+
+		if (action.type == BA_WALK)
+		{
+			Log(LOG_INFO) << "Replay: unit " << ev.actorId << " walk from "
+				<< action.actor->getPosition().x << "," << action.actor->getPosition().y << "," << action.actor->getPosition().z
+				<< " to " << action.target.x << "," << action.target.y << "," << action.target.z;
+		}
+		else if (action.type == BA_LAUNCH && !action.waypoints.empty())
+		{
+			Log(LOG_INFO) << "Replay: unit " << ev.actorId << " BA_LAUNCH with "
+				<< action.waypoints.size() << " waypoints, final target "
+				<< action.waypoints.back().x << "," << action.waypoints.back().y << "," << action.waypoints.back().z;
+		}
+
+		dispatchAction(action);
+	}
+	else if (ev.type == "INPUT_KNEEL")
+	{
+		BattleUnit *actor = _save->findUnitById(ev.actorId);
+		if (actor)
+		{
+			getMap()->getCamera()->centerOnPosition(actor->getPosition());
+			kneel(actor);
+		}
+	}
+	else if (ev.type == "WALK_END")
+	{
+		// Correct unit position if it didn't end up where it did during recording.
+		// Skip correction for INTERMEDIATE WALK_END events: only the LAST WALK_END
+		// before the next STATE_ACTION for this actor is authoritative.
+		bool isIntermediate = false;
+		auto *replayPlayerPtr = _save->getReplayPlayer();
+		if (replayPlayerPtr)
+		{
+			const auto &allEvents = replayPlayerPtr->getEvents();
+			size_t curIdx = replayPlayerPtr->getCurrentIndex();
+			for (size_t i = curIdx + 1; i < allEvents.size(); ++i)
+			{
+				if (allEvents[i].type == "STATE_ACTION" && allEvents[i].actorId == ev.actorId)
+					break;
+				if (allEvents[i].type == "WALK_END" && allEvents[i].actorId == ev.actorId)
+				{
+					isIntermediate = true;
+					break;
+				}
+			}
+		}
+
+		if (!isIntermediate)
+		{
+			auto endPosStr = ev.payload.find("endPos: ");
+			if (endPosStr != std::string::npos)
+			{
+				int ex, ey, ez;
+				if (sscanf(ev.payload.c_str() + endPosStr + 8, "%d,%d,%d", &ex, &ey, &ez) == 3)
+				{
+					BattleUnit *actor = _save->findUnitById(ev.actorId);
+					if (actor)
+					{
+						Position expected(ex, ey, ez);
+						if (actor->getPosition() != expected)
+						{
+							Log(LOG_INFO) << "Replay: correcting unit " << ev.actorId << " position from "
+								<< actor->getPosition().x << "," << actor->getPosition().y << "," << actor->getPosition().z
+								<< " to " << ex << "," << ey << "," << ez;
+							actor->setPosition(expected);
+							actor->setTile(_save->getTile(expected), _save);
+						}
+					}
+				}
+			}
+		}
+	}
+	else if (ev.type == "INPUT_CANCEL")
+	{
+		// No-op: cancel events are UI noise. Kept for backwards compat.
+	}
+	else if (ev.type == "INPUT_END_TURN")
+	{
+		requestEndTurn(false);
+	}
+	else if (ev.type == "END_TURN")
+	{
+		int eventSide = -1;
+		auto sidePos = ev.payload.find("side: ");
+		if (sidePos != std::string::npos)
+			eventSide = std::stoi(ev.payload.substr(sidePos + 6));
+
+		Log(LOG_INFO) << "Replay: END_TURN event, eventSide=" << eventSide
+			<< " currentSide=" << _save->getSide();
+
+		// Only trigger endTurn if the game is still on the side this event ends.
+		if (eventSide >= 0 && static_cast<int>(_save->getSide()) == eventSide)
+		{
+			if (!_endTurnRequested)
+			{
+				Log(LOG_INFO) << "Replay: triggering endTurn for side " << eventSide;
+				_endTurnRequested = true;
+				statePushBack(0);
+			}
+		}
+		else
+		{
+			Log(LOG_INFO) << "Replay: END_TURN skipped (side already changed)";
+		}
+	}
+	else
+	{
+		Log(LOG_DEBUG) << "Replay: ignoring event type '" << ev.type << "'";
+	}
 }
 
 }
