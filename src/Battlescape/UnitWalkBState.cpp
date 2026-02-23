@@ -73,9 +73,6 @@ void UnitWalkBState::init()
 		_beforeFirstStep = true;
 	}
 	_terrain->addMovingUnit(_unit);
-	if (_action.type == BA_NONE)
-		_action.type = BA_WALK;
-	_parent->recordPushedAction(this);
 }
 
 /**

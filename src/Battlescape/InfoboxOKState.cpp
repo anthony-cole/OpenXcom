@@ -18,6 +18,7 @@
  */
 #include "InfoboxOKState.h"
 #include "../Engine/Game.h"
+#include "../Engine/Timer.h"
 #include "../Interface/TextButton.h"
 #include "../Interface/Frame.h"
 #include "../Interface/Text.h"
@@ -70,6 +71,15 @@ InfoboxOKState::InfoboxOKState(const std::string &msg)
 	_txtTitle->setText(msg);
 
 	_game->getCursor()->setVisible(true);
+
+	// Auto-dismiss in replay mode
+	_timer = nullptr;
+	if (_game->getSavedGame()->getSavedBattle()->isReplayMode())
+	{
+		_timer = new Timer(1);
+		_timer->onTimer((StateHandler)&InfoboxOKState::btnOkClick);
+		_timer->start();
+	}
 }
 
 /**
@@ -77,7 +87,18 @@ InfoboxOKState::InfoboxOKState(const std::string &msg)
  */
 InfoboxOKState::~InfoboxOKState()
 {
+	delete _timer;
+}
 
+/**
+ * Keeps the animation timers running.
+ */
+void InfoboxOKState::think()
+{
+	if (_timer)
+	{
+		_timer->think(this, 0);
+	}
 }
 
 /**

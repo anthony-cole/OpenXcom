@@ -95,7 +95,7 @@ void PsiAttackBState::init()
 		return;
 	}
 
-	_parent->recordPushedAction(this);
+	_parent->recordAction(_action);
 
 	int height = _target->getFloatHeight() + (_target->getHeight() / 2) - _parent->getSave()->getTile(_action.target)->getTerrainLevel();
 	Position voxel = _action.target.toVoxel() + Position(8, 8, height);

@@ -190,7 +190,7 @@ void UnitDieBState::think()
 		_parent->getTileEngine()->calculateLighting(LL_ITEMS, _unit->getPosition(), _unit->getArmor()->getSize());
 		_parent->getTileEngine()->calculateFOV(_unit->getPosition(), _unit->getArmor()->getSize(), false); //Update FOV for anyone that can see me
 		_parent->popState();
-		if (_unit->getOriginalFaction() == FACTION_PLAYER && !_parent->getSave()->isReplayMode())
+		if (_unit->getOriginalFaction() == FACTION_PLAYER)
 		{
 			Game *game = _parent->getSave()->getBattleState()->getGame();
 			if (_unit->getStatus() == STATUS_DEAD)

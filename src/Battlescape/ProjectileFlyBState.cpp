@@ -142,7 +142,7 @@ void ProjectileFlyBState::init()
 	// Recording is done at init time (not push time) so that cancelled actions
 	// (dead target, no TU, no ammo) don't produce ghost events, and the RNG
 	// seed is captured at the correct moment.
-	_parent->recordPushedAction(this);
+	_parent->recordAction(_action);
 
 	Tile *endTile = _parent->getSave()->getTile(_action.target);
 	int distanceSq = _action.actor->distance3dToPositionSq(_action.target);

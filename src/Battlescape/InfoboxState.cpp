@@ -67,6 +67,12 @@ InfoboxState::InfoboxState(const std::string &msg)
 		_text->setVisible(false);
 	}
 
+	// Auto-dismiss instantly in replay mode
+	if (_game->getSavedGame()->getSavedBattle()->isReplayMode())
+	{
+		delay = 1;
+	}
+
 	_timer = new Timer(delay);
 	_timer->onTimer((StateHandler)&InfoboxState::close);
 	_timer->start();

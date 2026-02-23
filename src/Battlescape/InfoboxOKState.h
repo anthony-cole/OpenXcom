@@ -26,6 +26,7 @@ namespace OpenXcom
 class TextButton;
 class Frame;
 class Text;
+class Timer;
 
 /**
  * Notifies the player about things like soldiers going unconscious or dying from wounds.
@@ -36,11 +37,14 @@ private:
 	TextButton *_btnOk;
 	Frame *_frame;
 	Text *_txtTitle;
+	Timer *_timer;
 public:
 	/// Creates the InfoboxOKState.
 	InfoboxOKState(const std::string &msg);
 	/// Cleans up the InfoboxOKState.
 	~InfoboxOKState();
+	/// Runs the timer.
+	void think() override;
 	/// Handler for clicking the OK button.
 	void btnOkClick(Action *action);
 };

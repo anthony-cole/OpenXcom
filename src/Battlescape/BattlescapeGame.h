@@ -298,10 +298,14 @@ public:
 	/// Resets the flag.
 	void resetAllEnemiesNeutralized() { _allEnemiesNeutralized = false; }
 
-	/// Records a battle event for replay
+	/// Records a battle event for replay.
 	void recordBattleEvent(const std::string &eventType, BattleUnit *actor = nullptr, const std::string &payload = "");
-	/// Records a BattleState action for replay. Called from state init() after validation.
-	void recordPushedAction(BattleState *bs);
+	/// Records an action for replay.
+	void recordAction(const BattleAction &action);
+	/// Central action-to-BState dispatcher, used by both player input and replay playback.
+	void dispatchAction(BattleAction &action);
+	/// Converts a ReplayEvent into a BattleAction.
+	BattleAction buildActionFromEvent(const Replay::ReplayEvent &ev);
 	/// Executes a single replay event, dispatching to appropriate state.
 	void executeReplayEvent(const Replay::ReplayEvent &ev);
 
