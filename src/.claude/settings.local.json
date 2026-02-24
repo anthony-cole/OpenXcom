@@ -4,7 +4,10 @@
       "WebFetch(domain:api.github.com)",
       "Bash(git remote add:*)",
       "Bash(git fetch:*)",
-      "Bash(powershell.exe -NoProfile -Command:*)"
+      "Bash(powershell.exe -NoProfile -Command:*)",
+      "Bash(xxd:*)",
+      "Bash(python3:*)",
+      "Bash(node -e:*)"
     ]
   }
 }

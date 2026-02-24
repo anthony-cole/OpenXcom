@@ -392,7 +392,41 @@ void BattlescapeGame::handleAI(BattleUnit *unit)
 		{
 			if ((unit->getOriginalFaction() == FACTION_HOSTILE && unit->getVisibleUnits()->empty()) || pickUpWeaponsMoreActively)
 			{
+				// Snapshot ammo state before findItem for replay recording
+				struct AmmoSnap { int weaponId, slot, ammoId; };
+				std::vector<AmmoSnap> ammoBefore;
+				if (!_save->isReplayMode())
+				{
+					for (auto *w : { unit->getRightHandWeapon(), unit->getLeftHandWeapon() })
+						if (w && w->isWeaponWithAmmo())
+							for (int s = 0; s < RuleItem::AmmoSlotMax; ++s)
+							{
+								auto *a = w->getAmmoForSlot(s);
+								ammoBefore.push_back({w->getId(), s, a ? a->getId() : -1});
+							}
+				}
+
 				weaponPickedUp = findItem(&action, pickUpWeaponsMoreActively, walkToItem);
+
+				// Diff ammo state after findItem to record any reloads
+				if (weaponPickedUp && !_save->isReplayMode())
+				{
+					int idx = 0;
+					for (auto *w : { unit->getRightHandWeapon(), unit->getLeftHandWeapon() })
+						if (w && w->isWeaponWithAmmo())
+							for (int s = 0; s < RuleItem::AmmoSlotMax; ++s)
+							{
+								auto *a = w->getAmmoForSlot(s);
+								int newId = a ? a->getId() : -1;
+								if (idx < (int)ammoBefore.size() && ammoBefore[idx].ammoId != newId && newId >= 0)
+								{
+									std::ostringstream pl;
+									pl << "weaponId: " << w->getId() << " ammoId: " << newId << " slot: " << s;
+									recordBattleEvent("AMMO_LOAD", unit, pl.str());
+								}
+								idx++;
+							}
+				}
 			}
 		}
 	}
@@ -435,6 +469,14 @@ void BattlescapeGame::handleAI(BattleUnit *unit)
 
 	if (action.type == BA_SNAPSHOT || action.type == BA_AUTOSHOT || action.type == BA_AIMEDSHOT || action.type == BA_THROW || action.type == BA_HIT || action.type == BA_MINDCONTROL || action.type == BA_USE || action.type == BA_PANIC || action.type == BA_LAUNCH)
 	{
+		// Record AI silent grenade prime before throw
+		if (!_save->isReplayMode() && action.type == BA_THROW
+			&& action.weapon && action.weapon->getRules()->isGrenadeOrProxy())
+		{
+			std::ostringstream pl;
+			pl << "weaponId: " << action.weapon->getId();
+			recordBattleEvent("AI_GRENADE_PRIME", unit, pl.str());
+		}
 		ss.clear();
 		ss << "Attack type=" << action.type << " target="<< action.target << " weapon=" << action.weapon->getRules()->getType();
 		_parentState->debug(ss.str());
@@ -1851,6 +1893,12 @@ void BattlescapeGame::primaryAction(Position pos)
 					std::string error;
 					if (_currentAction.spendTU(&error))
 					{
+						if (!_save->isReplayMode())
+						{
+							std::ostringstream pl;
+							pl << "targetId: " << targetUnit->getId();
+							recordBattleEvent("MIND_PROBE", _currentAction.actor, pl.str());
+						}
 						_parentState->getGame()->getMod()->getSoundByDepth(_save->getDepth(), _currentAction.weapon->getRules()->getHitSound())->play(-1, getMap()->getSoundAngle(pos));
 						_parentState->getGame()->pushState (new UnitInfoState(targetUnit, _parentState, false, true));
 						cancelCurrentAction();
@@ -2883,7 +2931,7 @@ bool BattlescapeGame::takeItem(BattleItem* item, BattleAction *action)
 	auto* leftWeapon = action->actor->getLeftHandWeapon();
 	auto* unit = action->actor;
 
-	auto reloadWeapon = [&unit](BattleItem* weapon, BattleItem* i)
+	auto reloadWeapon = [&unit, this](BattleItem* weapon, BattleItem* i)
 	{
 		if (weapon && weapon->isWeaponWithAmmo() && !weapon->haveAllAmmo())
 		{
@@ -2896,6 +2944,12 @@ bool BattlescapeGame::takeItem(BattleItem* item, BattleAction *action)
 				if (cost.haveTU() && !weapon->getAmmoForSlot(slot))
 				{
 					weapon->setAmmoForSlot(slot, i);
+					if (!_save->isReplayMode())
+					{
+						std::ostringstream pl;
+						pl << "weaponId: " << weapon->getId() << " ammoId: " << i->getId() << " slot: " << slot;
+						recordBattleEvent("AMMO_LOAD", unit, pl.str());
+					}
 					cost.spendTU();
 					return true;
 				}
@@ -2956,6 +3010,16 @@ bool BattlescapeGame::takeItem(BattleItem* item, BattleAction *action)
 		break;
 	default: break;
 	}
+
+	if (placed && !_save->isReplayMode())
+	{
+		std::ostringstream pl;
+		pl << "itemId: " << item->getId()
+		   << " slot: " << item->getSlot()->getId()
+		   << " x: " << item->getSlotX() << " y: " << item->getSlotY();
+		recordBattleEvent("ITEM_MOVE", action->actor, pl.str());
+	}
+
 	return placed;
 }
 
@@ -3885,6 +3949,97 @@ void BattlescapeGame::executeReplayEvent(const Replay::ReplayEvent &ev)
 		else
 		{
 			Log(LOG_INFO) << "Replay: END_TURN skipped (side already changed)";
+		}
+	}
+	else if (ev.type == "AI_GRENADE_PRIME")
+	{
+		int weaponId = -1;
+		sscanf(ev.payload.c_str(), "weaponId: %d", &weaponId);
+		BattleUnit *actor = _save->findUnitById(ev.actorId);
+		BattleItem *weapon = _save->findItemById(weaponId);
+		if (actor && weapon)
+		{
+			actor->spendCost(actor->getActionTUs(BA_PRIME, weapon));
+			actor->spendTimeUnits(4);
+		}
+	}
+	else if (ev.type == "MEDIKIT_USE")
+	{
+		int targetId = -1, medikitActionInt = 0, bodyPartInt = 0;
+		sscanf(ev.payload.c_str(), "targetId: %d medikitAction: %d bodyPart: %d", &targetId, &medikitActionInt, &bodyPartInt);
+		BattleUnit *actor = _save->findUnitById(ev.actorId);
+		BattleUnit *target = _save->findUnitById(targetId);
+		if (actor && target)
+		{
+			BattleItem *medikit = nullptr;
+			for (auto *item : *actor->getInventory())
+				if (item->getRules()->getBattleType() == BT_MEDIKIT) { medikit = item; break; }
+			if (medikit)
+			{
+				BattleAction action;
+				action.actor = actor;
+				action.weapon = medikit;
+				action.type = BA_USE;
+				action.updateTU();
+				action.spendTU(nullptr);
+				getTileEngine()->medikitUse(&action, target,
+					static_cast<BattleMediKitAction>(medikitActionInt),
+					static_cast<UnitBodyPart>(bodyPartInt));
+				getTileEngine()->medikitRemoveIfEmpty(&action);
+			}
+		}
+	}
+	else if (ev.type == "AMMO_LOAD")
+	{
+		int weaponId = -1, ammoId = -1, slot = 0;
+		sscanf(ev.payload.c_str(), "weaponId: %d ammoId: %d slot: %d", &weaponId, &ammoId, &slot);
+		BattleItem *weapon = _save->findItemById(weaponId);
+		BattleItem *ammo = _save->findItemById(ammoId);
+		if (weapon && ammo)
+			weapon->setAmmoForSlot(slot, ammo);
+	}
+	else if (ev.type == "AMMO_UNLOAD")
+	{
+		int weaponId = -1, slot = 0;
+		sscanf(ev.payload.c_str(), "weaponId: %d ammoId: %*d slot: %d", &weaponId, &slot);
+		BattleItem *weapon = _save->findItemById(weaponId);
+		if (weapon)
+			weapon->setAmmoForSlot(slot, nullptr);
+	}
+	else if (ev.type == "ITEM_MOVE")
+	{
+		int itemId = -1, x = 0, y = 0;
+		char slotName[64] = {};
+		sscanf(ev.payload.c_str(), "itemId: %d slot: %63s x: %d y: %d", &itemId, slotName, &x, &y);
+		BattleItem *item = _save->findItemById(itemId);
+		BattleUnit *unit = _save->findUnitById(ev.actorId);
+		const RuleInventory *slot = getMod()->getInventory(std::string(slotName));
+		if (item && unit && slot)
+		{
+			Tile *t = unit->getTile();
+			if (t)
+				getTileEngine()->itemMoveInventory(t, unit, item, slot, x, y);
+		}
+	}
+	else if (ev.type == "MIND_PROBE")
+	{
+		int targetId = -1;
+		sscanf(ev.payload.c_str(), "targetId: %d", &targetId);
+		BattleUnit *actor = _save->findUnitById(ev.actorId);
+		if (actor)
+		{
+			BattleItem *probe = nullptr;
+			for (auto *item : *actor->getInventory())
+				if (item->getRules()->getBattleType() == BT_MINDPROBE) { probe = item; break; }
+			if (probe)
+			{
+				BattleAction action;
+				action.actor = actor;
+				action.weapon = probe;
+				action.type = BA_USE;
+				action.updateTU();
+				action.spendTU(nullptr);
+			}
 		}
 	}
 	else

@@ -18,6 +18,7 @@
  */
 #include <assert.h>
 #include <set>
+#include <sstream>
 #include "TileEngine.h"
 #include "AIModule.h"
 #include "Map.h"
@@ -33,6 +34,8 @@
 #include "../Engine/RNG.h"
 #include "../Engine/GraphSubset.h"
 #include "BattlescapeState.h"
+#include "BattlescapeGame.h"
+#include "../Mod/RuleInventory.h"
 #include "../Mod/MapDataSet.h"
 #include "../Mod/Unit.h"
 #include "../Mod/Mod.h"
@@ -4929,6 +4932,19 @@ bool TileEngine::medikitUse(BattleAction *action, BattleUnit *target, BattleMedi
 		return false;
 	}
 
+	if (_save->getBattleState() && !_save->isReplayMode())
+	{
+		auto *game = _save->getBattleGame();
+		if (game)
+		{
+			std::ostringstream pl;
+			pl << "targetId: " << target->getId()
+			   << " medikitAction: " << (int)originalMedikitAction
+			   << " bodyPart: " << (int)bodyPart;
+			game->recordBattleEvent("MEDIKIT_USE", action->actor, pl.str());
+		}
+	}
+
 	BattleActionAttack attack;
 	attack.type = action->type;
 	attack.attacker = action->actor;
@@ -5289,6 +5305,19 @@ void TileEngine::itemMoveInventory(Tile *t, BattleUnit *unit, BattleItem *item, 
 	item->setSlot(slot);
 	item->setSlotX(x);
 	item->setSlotY(y);
+
+	if (_save->getBattleState() && !_save->isReplayMode())
+	{
+		auto *game = _save->getBattleGame();
+		if (game)
+		{
+			std::ostringstream pl;
+			pl << "itemId: " << item->getId()
+			   << " slot: " << slot->getId()
+			   << " x: " << x << " y: " << y;
+			game->recordBattleEvent("ITEM_MOVE", unit, pl.str());
+		}
+	}
 }
 
 /**

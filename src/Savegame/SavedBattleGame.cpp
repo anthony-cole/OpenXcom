@@ -1053,6 +1053,21 @@ BattleUnit *SavedBattleGame::findUnitById(int id) const
 }
 
 /**
+ * Finds an item by its ID.
+ * @param id The item's ID.
+ * @return Pointer to the item, or nullptr.
+ */
+BattleItem *SavedBattleGame::findItemById(int id) const
+{
+	for (auto *item : _items)
+	{
+		if (item->getId() == id)
+			return item;
+	}
+	return nullptr;
+}
+
+/**
  * Gets the list of nodes.
  * @return Pointer to the list of nodes.
  */

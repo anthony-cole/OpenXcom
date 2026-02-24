@@ -92,8 +92,38 @@ bool launchReplay(Game *game, const std::string &filePath, SDL_Color *palette)
 			}
 		}
 
+		// When replaying from debrief, soldiers may have had their armor reverted
+		// by prepareDebriefing(). Temporarily override armor to match the battle-start
+		// snapshot so BattleUnit is constructed with the correct armor.
+		std::vector<std::pair<Soldier*, Armor*>> armorBackups;
+		if (!createdSavedGame)
+		{
+			for (const auto &unitReader : initNode["units"].children())
+			{
+				int id = unitReader["id"].readVal<int>();
+				if (id < BattleUnit::MAX_SOLDIER_ID)
+				{
+					std::string armorName = unitReader["genUnitArmor"].readVal(std::string());
+					Armor *armor = !armorName.empty() ? mod->getArmor(armorName) : nullptr;
+					if (armor)
+					{
+						Soldier *soldier = game->getSavedGame()->getSoldier(id);
+						if (soldier && soldier->getArmor() != armor)
+						{
+							armorBackups.push_back({soldier, soldier->getArmor()});
+							soldier->setArmor(armor);
+						}
+					}
+				}
+			}
+		}
+
 		SavedBattleGame *battleSave = new SavedBattleGame(mod, lang);
 		battleSave->load(initNode, mod, game->getSavedGame());
+
+		// Restore original armor on geoscape soldiers after battle units are created
+		for (auto &backup : armorBackups)
+			backup.first->setArmor(backup.second);
 		battleSave->loadMapResources(mod);
 
 		// 3. Restore the RNG seed so combat outcomes are deterministic

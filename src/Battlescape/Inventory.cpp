@@ -48,6 +48,7 @@
 #include "../Engine/Screen.h"
 #include "../Engine/CrossPlatform.h"
 #include "TileEngine.h"
+#include "BattlescapeGame.h"
 
 namespace OpenXcom
 {
@@ -1041,6 +1042,14 @@ void Inventory::mouseClick(Action *action, State *state)
 									}
 								}
 
+								auto *battle = _game->getSavedGame()->getSavedBattle();
+								if (battle && !battle->isReplayMode() && battle->getBattleGame())
+								{
+									std::ostringstream pl;
+									pl << "weaponId: " << item->getId() << " ammoId: " << _selItem->getId() << " slot: " << slotAmmo;
+									battle->getBattleGame()->recordBattleEvent("AMMO_LOAD", _selUnit, pl.str());
+								}
+
 								int sound = _selItem->getRules()->getReloadSound();
 								if (sound == Mod::NO_SOUND)
 								{
@@ -1397,6 +1406,16 @@ bool Inventory::unload(bool quickUnload)
 		else
 		{
 			auto* oldAmmo = _selItem->setAmmoForSlot(slotForAmmoUnload, nullptr);
+			if (oldAmmo)
+			{
+				auto *battle = _game->getSavedGame()->getSavedBattle();
+				if (battle && !battle->isReplayMode() && battle->getBattleGame())
+				{
+					std::ostringstream pl;
+					pl << "weaponId: " << _selItem->getId() << " ammoId: " << oldAmmo->getId() << " slot: " << slotForAmmoUnload;
+					battle->getBattleGame()->recordBattleEvent("AMMO_UNLOAD", _selUnit, pl.str());
+				}
+			}
 			if (SecondFreeHand != nullptr)
 			{
 				moveItem(oldAmmo, SecondFreeHand, 0, 0); // 2.
