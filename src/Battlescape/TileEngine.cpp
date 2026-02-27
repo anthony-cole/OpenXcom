@@ -5306,7 +5306,7 @@ void TileEngine::itemMoveInventory(Tile *t, BattleUnit *unit, BattleItem *item, 
 	item->setSlotX(x);
 	item->setSlotY(y);
 
-	if (_save->getBattleState() && !_save->isReplayMode())
+	if (unit && _save->getBattleState() && !_save->isReplayMode())
 	{
 		auto *game = _save->getBattleGame();
 		if (game)
